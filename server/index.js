@@ -26,7 +26,8 @@ const MAX_BUFFER = 256 * 1024;
 const ROOM_MAX = 32;
 const ROOM_RE = /^m-[a-z0-9]{3,10}$/;
 const SESSION_RE = /^[a-f0-9]{32}$/;
-const GRACE_MS = 30000;
+const GRACE_MS = Number(process.env.ROOM_GRACE_MS) || 90000; // Phones drop the connection while the player is in another app.
+const LONE_GRACE_MS = 300000; // A room with nobody else connected waits longer for its only player.
 const STALE_MS = 60000;
 const HEARTBEAT_MS = 15000;
 const BOARD_CACHE_MS = 5000;
@@ -197,7 +198,7 @@ let streamCount = 0;
 const streamsByIp = new Map();
 let store;
 
-const live = members => { const cut = Date.now() - STALE_MS; return members.filter(m => m.seen > cut); };
+const live = members => { const now = Date.now(); return members.filter(m => m.seen > now - (m.away ? LONE_GRACE_MS + STALE_MS : STALE_MS)); };
 const publicPeers = members => members.filter(m => m.presence && Number.isFinite(m.presence.j)).map(m => ({ peer: m.peer, by: m.uid, presence: { ...m.presence, ...(m.own ? { own: true } : {}) } }));
 
 async function pushRoom(name) {
@@ -323,12 +324,17 @@ async function roomStream(req, res, ip, url) {
     if (streams.get(peer) !== stream) return;
     stream.res = null;
     setAway(name, peer, true).catch(() => {});
-    stream.timer = setTimeout(() => {
+    const closedAt = Date.now();
+    const expire = async () => {
       if (streams.get(peer) !== stream) return;
+      const company = live(await store.members(name)).some(m => m.peer !== peer && !m.away);
+      if (streams.get(peer) !== stream) return;
+      if (!company && Date.now() - closedAt < LONE_GRACE_MS) { stream.timer = setTimeout(expire, 5000); stream.timer.unref(); return; }
       streams.delete(peer);
       if (!streams.size && local.get(name) === streams) { local.delete(name); store.unwatch(name).catch(() => {}); }
-      removeMember(name, peer).catch(e => console.error('leave failed:', e.message));
-    }, GRACE_MS);
+      await removeMember(name, peer);
+    };
+    stream.timer = setTimeout(() => expire().catch(e => console.error('leave failed:', e.message)), GRACE_MS);
     stream.timer.unref();
   });
 }

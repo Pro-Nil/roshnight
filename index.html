@@ -454,7 +454,7 @@ button.li:hover:not(:disabled){background:var(--plate)}
       try { await post("/api/room/join", { room: name, session }); waiting = true; flush(); }
       catch (e) {
         if ((e.code !== "not_found" && e.code !== "already_in_room") || left) return;
-        left = true; conn.abort(); clearInterval(timer);
+        left = true; conn.abort(); clearInterval(timer); document.removeEventListener("visibilitychange", wake);
         errors.forEach(f => f(e));
       }
     }
@@ -487,6 +487,9 @@ button.li:hover:not(:disabled){background:var(--plate)}
         wait = Math.min(wait * 2, 8000);
       }
     }
+    // Phones freeze the page in the background, so reconnect as soon as the player is back.
+    const wake = () => { if (!document.hidden && !left) { eventAt = 0; heard = Date.now(); conn.abort(); } };
+    document.addEventListener("visibilitychange", wake);
     // A live connection can stall silently on some networks, so check in whenever it goes quiet.
     const timer = setInterval(async () => {
       if (left) return;
@@ -508,7 +511,7 @@ button.li:hover:not(:disabled){background:var(--plate)}
         self.presence = q; self.updatedAt = Date.now(); waiting = true; flush(); fire();
       },
       onPeers(f, onError) { fns.add(f); if (onError) errors.add(onError); setTimeout(() => f({ peers: list(), joined: [], left: [], updated: [] }), 0); return () => fns.delete(f); },
-      async leave() { left = true; clearInterval(timer); conn.abort(); post("/api/room/leave", { room: name, session }).catch(() => {}); }
+      async leave() { left = true; clearInterval(timer); document.removeEventListener("visibilitychange", wake); conn.abort(); post("/api/room/leave", { room: name, session }).catch(() => {}); }
     };
     update(first);
     listen();
@@ -827,7 +830,23 @@ const readCode = v => cleanCode(String(v).trim().toUpperCase());
 const still = matchMedia("(prefers-reduced-motion: reduce)").matches;
 let toastT = 0;
 function toast(msg) { const t = $("toast"); t.textContent = msg; t.hidden = false; clearTimeout(toastT); toastT = setTimeout(() => { t.hidden = true; }, 3000); }
-function copy(text, done) { const f = () => toast("Copy this code: " + text); try { navigator.clipboard.writeText(text).then(() => toast(done), f); } catch (e) { f(); } }
+// Browsers only offer the modern clipboard on https, so plain http needs the older route.
+function copyOld(text) {
+  const was = document.activeElement, t = el("textarea");
+  t.value = text; t.readOnly = true; t.style.cssText = "position:fixed;left:0;top:0;width:1px;height:1px;opacity:0;font-size:16px";
+  document.body.append(t);
+  t.focus({ preventScroll: true }); t.select(); t.setSelectionRange(0, text.length);
+  let ok = false;
+  try { ok = document.execCommand("copy"); } catch (e) {}
+  t.remove();
+  if (was && was.focus) was.focus({ preventScroll: true });
+  return ok;
+}
+function copy(text, done) {
+  const old = () => toast(copyOld(text) ? done : "Copy this: " + text);
+  if (navigator.clipboard && window.isSecureContext) navigator.clipboard.writeText(text).then(() => toast(done), old);
+  else old();
+}
 
 /* ---------- Sound ---------- */
 let ac = null, muted = LS.get("roshnight-mute") === "1";

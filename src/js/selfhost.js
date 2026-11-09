@@ -137,7 +137,7 @@
       try { await post("/api/room/join", { room: name, session }); waiting = true; flush(); }
       catch (e) {
         if ((e.code !== "not_found" && e.code !== "already_in_room") || left) return;
-        left = true; conn.abort(); clearInterval(timer);
+        left = true; conn.abort(); clearInterval(timer); document.removeEventListener("visibilitychange", wake);
         errors.forEach(f => f(e));
       }
     }
@@ -170,6 +170,9 @@
         wait = Math.min(wait * 2, 8000);
       }
     }
+    // Phones freeze the page in the background, so reconnect as soon as the player is back.
+    const wake = () => { if (!document.hidden && !left) { eventAt = 0; heard = Date.now(); conn.abort(); } };
+    document.addEventListener("visibilitychange", wake);
     // A live connection can stall silently on some networks, so check in whenever it goes quiet.
     const timer = setInterval(async () => {
       if (left) return;
@@ -191,7 +194,7 @@
         self.presence = q; self.updatedAt = Date.now(); waiting = true; flush(); fire();
       },
       onPeers(f, onError) { fns.add(f); if (onError) errors.add(onError); setTimeout(() => f({ peers: list(), joined: [], left: [], updated: [] }), 0); return () => fns.delete(f); },
-      async leave() { left = true; clearInterval(timer); conn.abort(); post("/api/room/leave", { room: name, session }).catch(() => {}); }
+      async leave() { left = true; clearInterval(timer); document.removeEventListener("visibilitychange", wake); conn.abort(); post("/api/room/leave", { room: name, session }).catch(() => {}); }
     };
     update(first);
     listen();

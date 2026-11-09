@@ -44,7 +44,7 @@ function legalRoute(code) {
 const alive = async () => (await fetch(`${BASE}/api/health`)).status === 200;
 
 async function main() {
-  const child = spawn(process.execPath, [path.join(__dirname, '..', 'index.js')], { env: { ...process.env, PORT: String(PORT), HOST: '127.0.0.1', DATA_DIR: DATA, REDIS_URL: '', SESSION_SECRET: '' }, stdio: ['ignore', 'ignore', 'pipe'] });
+  const child = spawn(process.execPath, [path.join(__dirname, '..', 'index.js')], { env: { ...process.env, PORT: String(PORT), HOST: '127.0.0.1', DATA_DIR: DATA, REDIS_URL: '', SESSION_SECRET: '', ROOM_GRACE_MS: '800' }, stdio: ['ignore', 'ignore', 'pipe'] });
   let stderr = ''; child.stderr.on('data', d => { stderr += d; });
   for (let i = 0; i < 50 && !(await alive().catch(() => false)); i++) await sleep(100);
 
@@ -153,6 +153,28 @@ async function main() {
   check('a closed or reloaded tab can come back as the same player', back.status === 200 && back.data.peers.length === 1 && back.data.peer !== seat.data.peer, back);
   check('host keeps the host role after coming back', !!backSelf && backSelf.presence.own === true, back.data);
   check('the replaced tab cannot return as a second player', (await post('/api/room/join', { room: seatRoom, session: tab1 }, seatOwner.token)).status === 409);
+
+  // Switching apps on a phone
+  const loneRoom = 'm-lone', loneTab = hex(16), loneHost = await newPlayer();
+  await post('/api/room/create', { room: loneRoom, session: loneTab }, loneHost.token);
+  await post('/api/room/presence', { room: loneRoom, session: loneTab, presence: { tag: 'Lone', j: 1, st: 'lobby' } }, loneHost.token);
+  const loneStream = new AbortController();
+  await fetch(`${BASE}/api/room/stream?room=${loneRoom}&session=${loneTab}`, { headers: { Authorization: `Bearer ${loneHost.token}` }, signal: loneStream.signal });
+  loneStream.abort();
+  await new Promise(r => setTimeout(r, 1400));
+  const loneBack = await post('/api/room/join', { room: loneRoom, session: loneTab }, loneHost.token);
+  check('a lone host keeps the room while away in another app', loneBack.status === 200 && loneBack.data.peers.some(p => p.presence.own === true), loneBack);
+  const pairRoom = 'm-pair', pairHost = await newPlayer(), pairGuest = await newPlayer(), hostTab = hex(16), guestTab = hex(16);
+  await post('/api/room/create', { room: pairRoom, session: hostTab }, pairHost.token);
+  await post('/api/room/presence', { room: pairRoom, session: hostTab, presence: { tag: 'Host', j: 1 } }, pairHost.token);
+  await post('/api/room/join', { room: pairRoom, session: guestTab }, pairGuest.token);
+  await post('/api/room/presence', { room: pairRoom, session: guestTab, presence: { tag: 'Guest', j: 2 } }, pairGuest.token);
+  const guestStream = new AbortController();
+  await fetch(`${BASE}/api/room/stream?room=${pairRoom}&session=${guestTab}`, { headers: { Authorization: `Bearer ${pairGuest.token}` }, signal: guestStream.signal });
+  guestStream.abort();
+  await new Promise(r => setTimeout(r, 1400));
+  const left = await fetch(`${BASE}/api/room/peers?room=${pairRoom}&session=${hostTab}`, { headers: { Authorization: `Bearer ${pairHost.token}` } });
+  check('a player who really left is removed for those still waiting', left.status === 200 && (await left.json()).peers.length === 1);
 
   // One attempt at today's board
   const today = dailyCode(), todayRoute = legalRoute(today).route, racer = await newPlayer(), sneak = await newPlayer();
