@@ -323,13 +323,13 @@ button.li:hover:not(:disabled){background:var(--plate)}
   let token = null, uid = null, myTag = "";
   try { token = localStorage.getItem("roshnight-token"); } catch (e) {}
 
-  const failure = status => ({ code: { 400: "invalid_argument", 404: "not_found", 409: "room_taken", 403: "room_full", 429: "rate_limited" }[status] || "unavailable", message: "The server refused that." });
+  const failure = (status, body) => ({ code: (body && body.error === "already_in_room" && body.error) || { 400: "invalid_argument", 404: "not_found", 409: "room_taken", 403: "room_full", 429: "rate_limited" }[status] || "unavailable", message: "The server refused that." });
   async function post(path, body) {
     const headers = { "Content-Type": "application/json" };
     if (token) headers.Authorization = "Bearer " + token;
     let r = await fetch(path, { method: "POST", headers, body: JSON.stringify(body) });
     if (r.status === 401) { await hello(true); headers.Authorization = "Bearer " + token; r = await fetch(path, { method: "POST", headers, body: JSON.stringify(body) }); }
-    if (!r.ok) throw failure(r.status);
+    if (!r.ok) throw failure(r.status, await r.json().catch(() => null));
     return r.json();
   }
   async function hello(fresh) {
@@ -453,7 +453,7 @@ button.li:hover:not(:disabled){background:var(--plate)}
     async function rejoin() {
       try { await post("/api/room/join", { room: name, session }); waiting = true; flush(); }
       catch (e) {
-        if (e.code !== "not_found" || left) return;
+        if ((e.code !== "not_found" && e.code !== "already_in_room") || left) return;
         left = true; conn.abort(); clearInterval(timer);
         errors.forEach(f => f(e));
       }
@@ -1156,6 +1156,7 @@ function resize() {
   const wide = Math.min(W, H) >= 520, maxW = Math.floor((W - (wide ? 46 : 2)) / N), maxH = Math.floor((H - (wide ? 44 : 2)) / N);
   ch = Math.min(maxH, maxW);
   cw = Math.min(maxW, Math.round(ch * 1.8));
+  if (cw > ch) cw = Math.max(ch, Math.round(cw * (N - 1) / N)); // Leaves the stretched map one cell narrower.
   cs = Math.min(cw, ch);
   ox = wide ? Math.max(24, Math.floor((W - cw * N) / 2)) : Math.floor((W - cw * N) / 2);
   oy = wide ? Math.max(22, Math.floor((H - ch * N) / 2)) : Math.floor((H - ch * N) / 2);
@@ -1547,6 +1548,7 @@ async function enterRoom(name, create) {
     try { r = await room.join("m-" + name, { create }); }
     catch (e) {
       if (e && e.code === "not_found") { toast(`No room found with code ${name.toUpperCase()}. Check it with your friend.`); return; }
+      if (e && e.code === "already_in_room") { roomError = "You're already in this room in another tab."; return; }
       if (e && e.code === "room_full") { roomError = "That room is full."; return; }
       if (e && e.code === "rate_limited") { roomError = "Too many attempts. Wait a minute and try again."; return; }
       roomError = e && e.code === "not_permitted" ? "This account isn't allowed to use rooms on this page." : `The room couldn't be opened${e && e.code ? ` (${e.code})` : ""}. Try again.`;
@@ -1554,8 +1556,8 @@ async function enterRoom(name, create) {
     }
     const j = Date.now(), m = { name, room: r, j, cfg: { dur: 180000 }, rid: null, off: Infinity, isHost: false, host: null };
     M = m;
-    m.un = r.onPeers(onMatchPeers, () => { toast("The connection to this room was lost."); leaveRoom(); show("home"); });
-    const hasOwner = () => roster().some(p => !p.sameTab && p.presence.own === true);
+    m.un = r.onPeers(onMatchPeers, e => { toast(e && e.code === "already_in_room" ? "This room is now open in another tab." : "The connection to this room was lost."); leaveRoom(); show("home"); });
+    const hasOwner = () => r.peers().some(p => p.presence && p.presence.own === true);
     if (!create) {
       for (const t0 = Date.now(); Date.now() - t0 < 3000 && !hasOwner();) await pause(150);
       if (M !== m) return;

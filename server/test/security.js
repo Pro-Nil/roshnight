@@ -136,6 +136,24 @@ async function main() {
   for (let i = 0; i < 34; i++) { const guest = await newPlayer(); const r = await post('/api/room/join', { room: fullRoom, session: hex(16) }, guest.token); if (r.status === 403) full++; }
   check('room size is capped', full >= 2, full);
 
+  // One seat per player in a room
+  const seatRoom = 'm-seat', tab1 = hex(16), tab2 = hex(16), seatOwner = await newPlayer();
+  const seat = await post('/api/room/create', { room: seatRoom, session: tab1 }, seatOwner.token);
+  await post('/api/room/presence', { room: seatRoom, session: tab1, presence: { tag: 'Owner', j: 1, st: 'lobby' } }, seatOwner.token);
+  const second = await post('/api/room/join', { room: seatRoom, session: tab2 }, seatOwner.token);
+  check('a second tab cannot join a room as another player', second.status === 409 && second.data.error === 'already_in_room', second);
+  const tabStream = new AbortController();
+  const held = await fetch(`${BASE}/api/room/stream?room=${seatRoom}&session=${tab1}`, { headers: { Authorization: `Bearer ${seatOwner.token}` }, signal: tabStream.signal });
+  const stillBlocked = await post('/api/room/join', { room: seatRoom, session: tab2 }, seatOwner.token);
+  check('a second tab stays blocked while the first is connected', held.status === 200 && stillBlocked.status === 409, stillBlocked);
+  tabStream.abort();
+  await new Promise(r => setTimeout(r, 300));
+  const back = await post('/api/room/join', { room: seatRoom, session: tab2 }, seatOwner.token);
+  const backSelf = back.data.peers && back.data.peers.find(p => p.peer === back.data.peer);
+  check('a closed or reloaded tab can come back as the same player', back.status === 200 && back.data.peers.length === 1 && back.data.peer !== seat.data.peer, back);
+  check('host keeps the host role after coming back', !!backSelf && backSelf.presence.own === true, back.data);
+  check('the replaced tab cannot return as a second player', (await post('/api/room/join', { room: seatRoom, session: tab1 }, seatOwner.token)).status === 409);
+
   // One attempt at today's board
   const today = dailyCode(), todayRoute = legalRoute(today).route, racer = await newPlayer(), sneak = await newPlayer();
   check('score without an attempt is not counted', (await post('/api/score', { code: today, r: todayRoute }, sneak.token)).data.accepted === false);

@@ -20,6 +20,7 @@ async function enterRoom(name, create) {
     try { r = await room.join("m-" + name, { create }); }
     catch (e) {
       if (e && e.code === "not_found") { toast(`No room found with code ${name.toUpperCase()}. Check it with your friend.`); return; }
+      if (e && e.code === "already_in_room") { roomError = "You're already in this room in another tab."; return; }
       if (e && e.code === "room_full") { roomError = "That room is full."; return; }
       if (e && e.code === "rate_limited") { roomError = "Too many attempts. Wait a minute and try again."; return; }
       roomError = e && e.code === "not_permitted" ? "This account isn't allowed to use rooms on this page." : `The room couldn't be opened${e && e.code ? ` (${e.code})` : ""}. Try again.`;
@@ -27,8 +28,8 @@ async function enterRoom(name, create) {
     }
     const j = Date.now(), m = { name, room: r, j, cfg: { dur: 180000 }, rid: null, off: Infinity, isHost: false, host: null };
     M = m;
-    m.un = r.onPeers(onMatchPeers, () => { toast("The connection to this room was lost."); leaveRoom(); show("home"); });
-    const hasOwner = () => roster().some(p => !p.sameTab && p.presence.own === true);
+    m.un = r.onPeers(onMatchPeers, e => { toast(e && e.code === "already_in_room" ? "This room is now open in another tab." : "The connection to this room was lost."); leaveRoom(); show("home"); });
+    const hasOwner = () => r.peers().some(p => p.presence && p.presence.own === true);
     if (!create) {
       for (const t0 = Date.now(); Date.now() - t0 < 3000 && !hasOwner();) await pause(150);
       if (M !== m) return;

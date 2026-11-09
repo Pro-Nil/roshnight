@@ -226,6 +226,12 @@ async function removeMember(name, peer) {
   await store.publish(name);
 }
 
+// Whether a member's tab has lost its connection, which frees their seat for a new tab.
+async function setAway(name, peer, away) {
+  const me = (await store.members(name)).find(m => m.peer === peer);
+  if (me && !!me.away !== away) await store.putMember(name, { ...me, away, seen: Date.now() });
+}
+
 async function hello(req, res, ip) {
   if (!LIMIT.hello.allow(ip)) deny(429, 'rate_limited');
   await readJson(req);
@@ -247,8 +253,15 @@ async function roomOpen(req, res, ip, create) {
     const members = live(await store.members(name));
     const mine = members.find(m => m.peer === peer);
     if (!members.length) { if (!LIMIT.missIp.allow(ip)) deny(429, 'rate_limited'); deny(404, 'not_found'); }
-    if (!mine && members.length >= ROOM_MAX) deny(403, 'room_full');
-    if (!mine) await store.putMember(name, memberNew(uid, session, false));
+    const twin = mine ? null : members.find(m => m.uid === uid);
+    if (twin && !twin.away) deny(409, 'already_in_room');
+    if (!mine && !twin && members.length >= ROOM_MAX) deny(403, 'room_full');
+    if (twin) {
+      // Their earlier tab has gone (closed or reloaded), so this one takes over the same seat.
+      await store.putMember(name, { ...memberNew(uid, session, twin.own), joined: twin.joined, presence: twin.presence });
+      await store.delMember(name, twin.peer);
+      await store.publish(name);
+    } else if (!mine) await store.putMember(name, memberNew(uid, session, false));
   }
   json(res, 200, { peer, peers: publicPeers(live(await store.members(name))) });
 }
@@ -275,7 +288,7 @@ async function roomPeers(req, res, ip, url) {
   if (!LIMIT.read.allow(ip)) deny(429, 'rate_limited');
   const members = await store.members(name), me = members.find(m => m.peer === peer);
   if (!me) deny(404, 'not_found');
-  if (Date.now() - me.seen > 20000) await store.putMember(name, { ...me, seen: Date.now() });
+  if (me.away || Date.now() - me.seen > 20000) await store.putMember(name, { ...me, away: false, seen: Date.now() });
   json(res, 200, { peers: publicPeers(live(members)) });
 }
 async function roomStream(req, res, ip, url) {
@@ -295,6 +308,7 @@ async function roomStream(req, res, ip, url) {
   if (old && old.res) old.res.destroy();
   const stream = { res, gen: (old ? old.gen : 0) + 1, timer: null };
   streams.set(peer, stream);
+  setAway(name, peer, false).catch(() => {});
   schedulePush(name);
   const beat = setInterval(async () => {
     res.write(': ping\n\n');
@@ -308,6 +322,7 @@ async function roomStream(req, res, ip, url) {
     if (left > 0) streamsByIp.set(ip, left); else streamsByIp.delete(ip);
     if (streams.get(peer) !== stream) return;
     stream.res = null;
+    setAway(name, peer, true).catch(() => {});
     stream.timer = setTimeout(() => {
       if (streams.get(peer) !== stream) return;
       streams.delete(peer);

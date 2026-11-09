@@ -6,13 +6,13 @@
   let token = null, uid = null, myTag = "";
   try { token = localStorage.getItem("roshnight-token"); } catch (e) {}
 
-  const failure = status => ({ code: { 400: "invalid_argument", 404: "not_found", 409: "room_taken", 403: "room_full", 429: "rate_limited" }[status] || "unavailable", message: "The server refused that." });
+  const failure = (status, body) => ({ code: (body && body.error === "already_in_room" && body.error) || { 400: "invalid_argument", 404: "not_found", 409: "room_taken", 403: "room_full", 429: "rate_limited" }[status] || "unavailable", message: "The server refused that." });
   async function post(path, body) {
     const headers = { "Content-Type": "application/json" };
     if (token) headers.Authorization = "Bearer " + token;
     let r = await fetch(path, { method: "POST", headers, body: JSON.stringify(body) });
     if (r.status === 401) { await hello(true); headers.Authorization = "Bearer " + token; r = await fetch(path, { method: "POST", headers, body: JSON.stringify(body) }); }
-    if (!r.ok) throw failure(r.status);
+    if (!r.ok) throw failure(r.status, await r.json().catch(() => null));
     return r.json();
   }
   async function hello(fresh) {
@@ -136,7 +136,7 @@
     async function rejoin() {
       try { await post("/api/room/join", { room: name, session }); waiting = true; flush(); }
       catch (e) {
-        if (e.code !== "not_found" || left) return;
+        if ((e.code !== "not_found" && e.code !== "already_in_room") || left) return;
         left = true; conn.abort(); clearInterval(timer);
         errors.forEach(f => f(e));
       }
