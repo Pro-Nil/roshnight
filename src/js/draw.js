@@ -36,7 +36,7 @@ function resize() {
   if (!B || screen !== "game") return;
   const W = Math.floor(wrap.clientWidth), H = Math.floor(wrap.clientHeight);
   if (W <= 0 || H <= 0) return;
-  size = W; sizeH = H; dpr = Math.min(window.devicePixelRatio || 1, 2);
+  size = W; sizeH = H; dpr = Math.min(window.devicePixelRatio || 1, Math.min(W, H) < 520 ? 3 : 2); // Small boards need every pixel to stay readable.
   cv.width = W * dpr; cv.height = H * dpr; cv.style.width = W + "px"; cv.style.height = H + "px";
   // Cells may run wider than tall so the map fills a wide screen. Pieces and targets stay in proportion.
   const wide = Math.min(W, H) >= 520, maxW = Math.floor((W - (wide ? 46 : 2)) / N), maxH = Math.floor((H - (wide ? 44 : 2)) / N);
@@ -76,7 +76,7 @@ function drawTarget(i, t) {
   if (v > 0) ctx.arc(x, y, R, 0, 7);
   else { const q = R * 1.18; ctx.moveTo(x, y - q); ctx.lineTo(x + q, y); ctx.lineTo(x, y + q); ctx.lineTo(x - q, y); ctx.closePath(); }
   if (on) { ctx.fillStyle = col; ctx.fill(); } else { ctx.fillStyle = COLOR.night; ctx.fill(); ctx.strokeStyle = col; ctx.lineWidth = 1.3; ctx.stroke(); }
-  if (cs >= 10) { ctx.fillStyle = on ? COLOR.night : col; ctx.font = `700 ${Math.round(cs * .58)}px ${LABEL}`; ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.fillText(Math.abs(v), x, y + .5); }
+  if (cs >= 8) { ctx.fillStyle = on ? COLOR.night : col; ctx.font = `700 ${Math.round(cs * (cs < 16 ? .72 : .58))}px ${LABEL}`; ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.fillText(Math.abs(v), x, y + .5); }
   ctx.restore();
 }
 function draw(t) {

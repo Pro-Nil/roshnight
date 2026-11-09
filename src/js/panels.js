@@ -129,7 +129,7 @@ function makeGhost() {
   if (B.wall[hover]) { $("read").innerHTML = `${where(hover)} Blockade. It stops the beam.`; return; }
   if (v) { $("read").innerHTML = `${where(hover)} ${v > 0 ? "Circle" : "Diamond"} worth ${fmtD(v)}${lit[hover] ? ", already lit." : "."}`; return; }
   if (hover === B.src) { $("read").innerHTML = `${where(hover)} The beam starts here.`; return; }
-  if (P[hover]) { const p = P[hover]; $("read").innerHTML = `${where(hover)} ${p <= 2 ? "Mirror" : "Splitter"} ${glyph(p & 1 ? 1 : 2)}${used[hover] ? "" : ", not on the beam yet"}. ${tool === "e" ? "Click to remove it." : "Click to flip it, drag to move it."}`; return; }
+  if (P[hover]) { const p = P[hover]; $("read").innerHTML = `${where(hover)} ${p <= 2 ? "Mirror" : "Splitter"} ${glyph(p & 1 ? 1 : 2)}${used[hover] ? "" : ", not on the beam yet"}. ${tool === "e" ? TAP + " to remove it." : TAP + " to flip it, drag to move it."}`; return; }
   if (tool === "e") { $("read").innerHTML = where(hover); return; }
   const { m, s } = count();
   if (tool === "m" ? m >= CM : s >= CS) { $("read").innerHTML = `${where(hover)} No ${tool === "m" ? "mirrors" : "splitters"} left. Erase or move one.`; return; }
@@ -139,5 +139,6 @@ function makeGhost() {
   else { ghost = { segs: [], at: hover, p }; $("read").innerHTML = `${where(hover)} The beam doesn't reach this cell yet.`; }
 }
 const fmtD0 = d => (d >= 0 ? "+" + d : MINUS + Math.abs(d));
-function hint() { $("read").textContent = "Click a cell on the beam to place a piece. Press R to flip its direction first."; }
+const TAP = COARSE ? "Tap" : "Click";
+function hint() { $("read").textContent = COARSE ? "Tap a cell on the beam. Press and slide to aim." : "Click a cell on the beam to place a piece. Press R to flip its direction first."; }
 

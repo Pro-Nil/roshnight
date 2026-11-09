@@ -21,6 +21,8 @@ function drawBg(t) {
     s.pts.push([x + DC[s.d], y + DR[s.d]]);
     if (s.pts.length > 150) s.pts.shift();
   }
+  if (COARSE && t - (s.painted || 0) < 40) return; // Saves battery on phones.
+  s.painted = t;
   bx.setTransform(s.ratio, 0, 0, s.ratio, 0, 0);
   bx.fillStyle = "#0a0e1c"; bx.fillRect(0, 0, s.w, s.h);
   bx.strokeStyle = "rgba(160,168,201,.06)"; bx.lineWidth = 1; bx.beginPath();

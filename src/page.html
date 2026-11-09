@@ -36,7 +36,7 @@
       </div>
       <div class="plate">
         <h2>Join a room</h2>
-        <div class="row"><input id="lb-code" class="up" maxlength="10" aria-label="Room code to join" autocomplete="off" spellcheck="false" placeholder="Code from your friend"><button id="lb-join">Join room</button></div>
+        <div class="row"><input id="lb-code" class="up" maxlength="10" aria-label="Room code to join" autocomplete="off" autocapitalize="characters" autocorrect="off" enterkeyhint="go" spellcheck="false" placeholder="Code from your friend"><button id="lb-join">Join room</button></div>
       </div>
       <p class="note" id="lb-off" hidden>Multiplayer needs the game server. You can still play solo.</p>
     </div>
@@ -50,7 +50,7 @@
       <div class="plate">
         <h2>Time on the board</h2>
         <div class="seg" id="lb-dur"></div>
-        <label class="mins"><span class="lab">Custom minutes</span><input id="lb-mins" type="number" min="1" max="60"></label>
+        <label class="mins"><span class="lab">Custom minutes</span><input id="lb-mins" type="number" inputmode="numeric" min="1" max="60"></label>
       </div>
       <div class="row"><button class="go" id="lb-start">Start for everyone</button><button id="lb-leave">Leave room</button></div>
       <p class="note" id="lb-wait"></p>
@@ -64,12 +64,12 @@
     <div class="plate">
       <h2>Board</h2>
       <div class="seg"><button id="so-random" aria-pressed="true">Random board</button><button id="so-pick" aria-pressed="false">Use a code</button></div>
-      <input id="so-code" class="up" maxlength="10" aria-label="Board code" autocomplete="off" spellcheck="false" placeholder="Board code" style="margin-top:8px" hidden>
+      <input id="so-code" class="up" maxlength="10" aria-label="Board code" autocomplete="off" autocapitalize="characters" autocorrect="off" enterkeyhint="done" spellcheck="false" placeholder="Board code" style="margin-top:8px" hidden>
     </div>
     <div class="plate">
       <h2>Time on the board</h2>
       <div class="seg" id="so-dur"></div>
-      <label class="mins"><span class="lab">Custom minutes</span><input id="so-mins" type="number" min="1" max="60"></label>
+      <label class="mins"><span class="lab">Custom minutes</span><input id="so-mins" type="number" inputmode="numeric" min="1" max="60"></label>
     </div>
     <p class="note" id="so-note"></p>
     <button class="go" id="so-start">Start</button>
@@ -80,7 +80,7 @@
   <div class="sub-screen">
     <div class="bar"><h2>Leaderboard</h2><button id="rk-back">Menu</button></div>
     <div class="row">
-      <input id="rk-code" class="up" maxlength="10" aria-label="Board code" autocomplete="off" spellcheck="false" placeholder="Board code" style="flex:2 1 0">
+      <input id="rk-code" class="up" maxlength="10" aria-label="Board code" autocomplete="off" autocapitalize="characters" autocorrect="off" enterkeyhint="go" spellcheck="false" placeholder="Board code" style="flex:2 1 0">
       <button id="rk-go">Show board</button>
       <button id="rk-today">Today's</button>
     </div>
@@ -113,7 +113,7 @@
       <div class="row" id="vbtns"></div>
       <div id="vshare"></div>
     </section>
-    <section>
+    <section id="hudbox">
       <div class="hud">
         <div><div class="lab">Now</div><div id="score">0</div></div>
         <div><div class="lab">Best, auto-saved</div><div id="bestv">0</div></div>
@@ -141,7 +141,7 @@
       <div id="chips" aria-label="Saved layouts"></div>
       <button id="lockin" style="width:100%;margin-top:6px">End board now</button>
     </section>
-    <section>
+    <section id="plbox">
       <div class="lab" id="pl-head" style="margin-bottom:6px"></div>
       <div id="players"></div>
       <p class="empty" id="pl-empty" hidden></p>
@@ -162,7 +162,7 @@
       <li><b>Your best score saves itself</b> every time you beat it. When the clock stops, your best layout is the one that counts, so experimenting costs nothing.</li>
       <li><b>Save a layout</b> and start over as many times as you like. Select a saved layout to bring it back.</li>
     </ul>
-    <p>Click a cell on the beam to place the selected piece. Hovering first shows the new route and the change in score. Click a piece to flip it, drag it to move it, right-click to remove it.</p>
+    <p>Tap or click a cell on the beam to place the selected piece. On a phone, press and slide to aim with the magnifier, and the piece lands where you let go. Tap a piece to flip it, drag it to move it, and use Erase to remove it. With a mouse, hover to preview and right-click to remove.</p>
     <p>Every board runs against a clock. When it ends you can open the bot's route and other players' routes to compare.</p>
     <p>Create a room and share its code to race friends on one random board. Solo lets you pick the clock and play a random board or any code. Today's board has its own code and leaderboard each day, and you get one attempt.</p>
     <button class="go" id="how-close" style="width:100%">Got it</button>

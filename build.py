@@ -13,6 +13,7 @@ SCRIPTS = ['selfhost', 'core', 'bot', 'board', 'util', 'sound', 'routes', 'servi
 HEAD = (
     '<!doctype html>\n<html lang="en">\n<head>\n<meta charset="utf-8">\n'
     '<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">\n'
+    '<meta name="theme-color" content="#0a0e1c">\n'
     "<style>body{margin:0}</style>\n</head>\n<body>\n"
 )
 
