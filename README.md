@@ -14,7 +14,11 @@ The same board code always generates the same city.
 
 ## Modes
 
-Today's board, free play, a 3-minute time trial and timed live matches. Each board code has its own leaderboard, and every score on it is recalculated from the route that earned it.
+- **Today's board:** a new code every day (midnight India time), a fixed 5-minute clock and its own leaderboard with that day's stats.
+- **Multiplayer:** anyone can create a room and share its code. The host sets the time, and starting gives everyone the same random board.
+- **Solo:** pick the time, then play a random board or any board code.
+
+Every board has a clock, and the bot's route opens only after the board ends. Each board code has its own leaderboard, and every score on it is recalculated from the route that earned it.
 
 ## Run it
 
