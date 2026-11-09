@@ -34,7 +34,7 @@
   function store(id, tag, code, e) {
     const d = scores.get(id) || { tag: "", boards: {} };
     if (tag) d.tag = tag;
-    d.boards[code] = { t: { r: e.r, at: e.at, d: e.d } };
+    d.boards[code] = { t: { r: e.r, at: e.at, d: e.d, s: e.s, n: e.n } };
     scores.set(id, d);
   }
   async function loadBoard(code) {
@@ -54,15 +54,34 @@
   };
   setInterval(() => { if (!document.hidden) recent.slice(0, 2).forEach(c => { if (Date.now() - (fetched.get(c) || 0) > 15000) loadBoard(c); }); }, 5000);
 
+  // Keeps one clock for everyone, using the fastest of a few round trips to the server.
+  let clockOffset = 0;
+  async function syncClock() {
+    let best = Infinity;
+    for (let i = 0; i < 5; i++) {
+      try {
+        const began = performance.now();
+        const { now } = await (await fetch("/api/time", { cache: "no-store" })).json();
+        const trip = performance.now() - began;
+        if (trip < best) { best = trip; clockOffset = now + trip / 2 - Date.now(); }
+      } catch (e) { return; }
+    }
+  }
   const ready = (async () => {
     try {
       const h = await fetch("/api/health", { cache: "no-store" });
       if (!h.ok || !(await h.json()).roshnight) return false;
       await hello();
+      syncClock();
       fetch("/api/hot").then(r => r.json()).then(j => j.codes.forEach(c => window.roshnightNeed(c))).catch(() => {});
       return true;
     } catch (e) { return false; }
   })();
+
+  window.roshnightDaily = {
+    start: async code => ((await ready) ? post("/api/daily/start", { code }) : null),
+    finish: async code => { if (await ready) post("/api/daily/finish", { code }).catch(() => {}); }
+  };
 
   async function write(data) {
     if (typeof data.tag === "string" && data.tag !== myTag) { myTag = data.tag; await post("/api/tag", { tag: data.tag }); const d = scores.get(uid); if (d) d.tag = data.tag; }
@@ -156,7 +175,7 @@
       if (left) return;
       const now = Date.now();
       if (now - heard > 40000) { heard = now; conn.abort(); }
-      if (now - eventAt < (self.presence.st === "play" ? 15000 : 4000)) return;
+      if (now - eventAt < (self.presence.st === "play" ? 15000 : 2000)) return;
       eventAt = now;
       try {
         const res = await fetch(`/api/room/peers?room=${name}&session=${session}`, { headers: { Authorization: "Bearer " + token } });
@@ -165,7 +184,7 @@
       } catch (e) {}
     }, 1000);
     const r = {
-      name, peers: list, connected: () => true,
+      name, peers: list, connected: () => true, serverNow: () => Date.now() + clockOffset,
       async presence(patch) {
         const q = Object.assign({}, self.presence);
         for (const k in patch) { if (patch[k] === null) delete q[k]; else q[k] = patch[k]; }
@@ -180,6 +199,7 @@
   }
   const room = {
     async join(name, opts) {
+      syncClock();
       const res = await post(opts && opts.create ? "/api/room/create" : "/api/room/join", { room: name, session });
       return makeRoom(name, res.peers, res.peer);
     }

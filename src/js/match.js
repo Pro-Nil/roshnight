@@ -57,7 +57,7 @@ function onMatchPeers() {
   const ro = roster(); M.host = ro[0] || null; M.isHost = !!(ro[0] && ro[0].sameTab);
   const hp = M.host && M.host.presence, h = hp && cleanH(hp.h);
   if (h) {
-    const off = M.host.sameTab ? 0 : M.host.updatedAt - (+hp.cl || 0);
+    const off = M.room.serverNow ? Date.now() - M.room.serverNow() : (M.host.sameTab ? 0 : M.host.updatedAt - (+hp.cl || 0));
     if (h.rid !== M.rid) {
       const s = h.start + off;
       if (s + h.dur > Date.now() + 3000) {
@@ -117,7 +117,7 @@ $("lb-copy").onclick = () => copy(M.name.toUpperCase(), "Room code copied.");
 $("lb-start").onclick = () => {
   if (!M || !M.isHost) return;
   const now = Date.now();
-  M.room.presence({ h: { rid: Math.random().toString(36).slice(2, 10), code: randomCode(), dur: M.cfg.dur, start: now + 4500 }, cl: now }).catch(() => {});
+  M.room.presence({ h: { rid: Math.random().toString(36).slice(2, 10), code: randomCode(), dur: M.cfg.dur, start: (M.room.serverNow ? M.room.serverNow() : now) + 4500 }, cl: now }).catch(() => {});
 };
 $("lb-leave").onclick = () => { leaveRoom(); renderLobby(); };
 $("lb-back").onclick = () => { leaveRoom(); show("home"); };
