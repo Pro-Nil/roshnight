@@ -1,20 +1,44 @@
-/* ---------- Live match ---------- */
-let M = null;
-const DURS = [120000, 180000, 300000, 600000];
+/* ---------- Multiplayer rooms ---------- */
+let M = null, entering = false;
+const pause = ms => new Promise(r => setTimeout(r, ms));
+const ROOM_RE = /^[a-z0-9]{3,10}$/;
 function randomRoom() { const a = "abcdefghjkmnpqrstuvwxyz23456789"; let s = ""; for (let i = 0; i < 5; i++) s += a[Math.floor(Math.random() * a.length)]; return s; }
-async function enterRoom(name) {
-  if (!room) return;
-  if (M) leaveRoom();
-  let r;
-  try { r = await room.join("m-" + name); } catch (e) { toast("That match can't be opened right now. Try again."); return; }
-  const j = Date.now(), cfg = { code: randomCode(), dur: 180000 };
-  M = { name, room: r, j, cfg, rid: null, off: Infinity, isHost: false, host: null, lastOpen: "" };
-  r.presence({ tag: displayTag(), j, cl: j, st: "lobby", sc: 0, n: 0, r: null, rid: null, h: null, cfg }).catch(() => {});
-  M.un = r.onPeers(onMatchPeers, () => { toast("The connection to this match was lost."); leaveRoom(); show("home"); });
-  show("lobby");
+function setBusy(on) { entering = on; for (const id of ["lb-create", "lb-join"]) $(id).disabled = on || !room; }
+async function enterRoom(name, create) {
+  if (!room || entering) return;
+  setBusy(true);
+  try {
+    if (M) leaveRoom();
+    let r;
+    try { r = await room.join("m-" + name); } catch (e) { toast("That room can't be opened right now. Try again."); return; }
+    const j = Date.now(), m = { name, room: r, j, cfg: { dur: 180000 }, rid: null, off: Infinity, isHost: false, host: null };
+    M = m;
+    m.un = r.onPeers(onMatchPeers, () => { toast("The connection to this room was lost."); leaveRoom(); show("home"); });
+    const hasOwner = () => roster().some(p => !p.sameTab && p.presence.own === true);
+    if (create) {
+      await pause(1500);
+      if (M !== m) return;
+      if (hasOwner()) { leaveRoom(); toast(`Room ${name.toUpperCase()} is already in use. Pick another code.`); return; }
+    } else {
+      for (const t0 = Date.now(); Date.now() - t0 < 3000 && !hasOwner();) await pause(150);
+      if (M !== m) return;
+      if (!hasOwner()) { leaveRoom(); toast(`No room found with code ${name.toUpperCase()}. Check it with your friend.`); return; }
+    }
+    r.presence({ tag: displayTag(), j, cl: j, st: "lobby", sc: 0, n: 0, r: null, rid: null, h: null, own: create ? true : null, cfg: m.cfg }).catch(() => {});
+    show("lobby");
+  } finally { setBusy(false); }
 }
-function roster() { return M ? M.room.peers().filter(p => p.kind === "viewer" && p.presence && Number.isFinite(p.presence.j)).sort((a, b) => a.presence.j - b.presence.j || (a.peer < b.peer ? -1 : 1)) : []; }
-function cleanH(h) { if (!h || typeof h.rid !== "string" || h.rid.length > 12) return null; const c = cleanCode(h.code); if (!c || !Number.isFinite(h.start)) return null; const dur = +h.dur; if (!(dur >= 30000 && dur <= 900000)) return null; return { rid: h.rid, code: c, dur, start: h.start }; }
+function roster() {
+  if (!M) return [];
+  const rank = p => (p.presence.own === true ? 0 : 1);
+  return M.room.peers().filter(p => p.kind === "viewer" && p.presence && Number.isFinite(p.presence.j)).sort((a, b) => rank(a) - rank(b) || a.presence.j - b.presence.j || (a.peer < b.peer ? -1 : 1));
+}
+function cleanH(h) {
+  if (!h || typeof h.rid !== "string" || h.rid.length > 12) return null;
+  const c = cleanCode(h.code); if (!c || !Number.isFinite(h.start)) return null;
+  const dur = +h.dur; if (!(dur >= 60000 && dur <= 3600000)) return null;
+  return { rid: h.rid, code: c, dur, start: h.start };
+}
 function onMatchPeers() {
   if (!M) return;
   const ro = roster(); M.host = ro[0] || null; M.isHost = !!(ro[0] && ro[0].sameTab);
@@ -32,25 +56,19 @@ function onMatchPeers() {
       startAt += off - M.off; endAt += off - M.off; M.off = off;
     }
   }
-  publishOpen(ro);
   if (screen === "lobby") renderLobby();
   if (screen === "game") { renderPlayers(); renderVerdict(); }
 }
 setInterval(() => { if (M && M.isHost && M.rid && mode === "live" && Date.now() < endAt) M.room.presence({ cl: Date.now() }).catch(() => {}); }, 4000);
-function roundActive() { return M && M.rid && screen === "game" && mode === "live" && !finished; }
-function publishOpen(ro) {
-  if (!room || !M) return;
-  const o = M.isHost && !roundActive() && screen === "lobby" ? { room: M.name, n: ro.length, dur: M.cfg.dur, tag: displayTag() } : null, js = JSON.stringify(o);
-  if (js !== M.lastOpen) { M.lastOpen = js; room.presence({ open: o }).catch(() => {}); }
-}
-function hostCfg() { const c = M.host && M.host.presence && M.host.presence.cfg; if (M.isHost || !c) return M.cfg; return { code: cleanCode(c.code) || "?", dur: DURS.includes(+c.dur) ? +c.dur : 180000 }; }
+function hostDur() { const c = M.host && M.host.presence && M.host.presence.cfg, d = c && +c.dur; return M.isHost || !(d >= 60000 && d <= 3600000) ? M.cfg.dur : d; }
 function renderLobby() {
-  const inRoom = !!M;
+  const inRoom = !!M && !entering;
   $("lb-out").hidden = inRoom; $("lb-in").hidden = !inRoom;
   $("lb-off").hidden = !!room;
+  if (!entering) { $("lb-create").disabled = !room; $("lb-join").disabled = !room; }
   if (!inRoom) return;
   $("lb-room").textContent = M.name.toUpperCase();
-  const ro = roster(), cfg = hostCfg(), list = $("roster");
+  const ro = roster(), list = $("roster");
   list.textContent = "";
   $("lb-n").textContent = String(ro.length);
   ro.forEach((p, i) => {
@@ -58,44 +76,40 @@ function renderLobby() {
     r.append(el("span", "", (typeof q.tag === "string" && q.tag ? q.tag.slice(0, 16) : "Player") + (p.sameTab ? " (you)" : "")), el("span", "", i === 0 ? "Host" : q.st === "play" ? "Playing" : "Ready"));
     list.append(r);
   });
-  const durBox = $("lb-dur"); durBox.textContent = "";
-  for (const d of DURS) {
-    const b = el("button", "", clock(d)); b.setAttribute("aria-pressed", String(d === cfg.dur)); b.disabled = !M.isHost;
-    b.onclick = () => { M.cfg = Object.assign({}, M.cfg, { dur: d }); pushCfg(); };
-    durBox.append(b);
-  }
-  const bi = $("lb-board");
-  if (document.activeElement !== bi) bi.value = cfg.code;
-  bi.disabled = !M.isHost; $("lb-shuffle").disabled = !M.isHost; $("lb-today").disabled = !M.isHost;
+  renderTime("lb-dur", "lb-mins", hostDur(), M.isHost, d => { M.cfg = { dur: d }; M.room.presence({ cfg: M.cfg }).catch(() => {}); renderLobby(); });
   $("lb-start").hidden = !M.isHost;
-  $("lb-wait").textContent = M.isHost ? (ro.length < 2 ? "You can start alone, or share the code and wait for others." : "Everyone starts on the same board at the same moment. Each player's best layout counts.") : "Waiting for the host to start.";
+  $("lb-wait").textContent = M.isHost ? (ro.length < 2 ? "Share the code with your friends. You can also start alone." : "When you start, everyone gets the same random board at the same moment.") : "Waiting for the host to start. The board stays hidden until then.";
 }
-function pushCfg() { M.room.presence({ cfg: M.cfg }).catch(() => {}); renderLobby(); publishOpen(roster()); }
 function backToLobby() {
   if (!M) { show("home"); return; }
-  if (M.isHost) { M.cfg = Object.assign({}, M.cfg, { code: randomCode() }); M.room.presence({ h: null, cfg: M.cfg }).catch(() => {}); }
+  if (M.isHost) M.room.presence({ h: null }).catch(() => {});
   show("lobby");
-  publishOpen(roster());
 }
 function leaveRoom() {
   if (!M) return;
   const m = M; M = null;
   try { m.un && m.un(); } catch (e) {}
   m.room.leave().catch(() => {});
-  if (room) room.presence({ open: null }).catch(() => {});
 }
-$("lb-create").onclick = () => enterRoom(randomRoom());
-function joinTyped() { const v = $("lb-code").value.trim().toLowerCase(); if (!/^[a-z0-9]{5}$/.test(v)) { toast("Match codes have 5 letters or numbers."); return; } enterRoom(v); }
+function createTyped() {
+  const v = $("lb-new").value.trim().toLowerCase() || randomRoom();
+  if (!ROOM_RE.test(v)) { toast("Room codes use 3 to 10 letters or numbers."); return; }
+  enterRoom(v, true);
+}
+function joinTyped() {
+  const v = $("lb-code").value.trim().toLowerCase();
+  if (!ROOM_RE.test(v)) { toast("Room codes use 3 to 10 letters or numbers."); return; }
+  enterRoom(v, false);
+}
+$("lb-create").onclick = createTyped;
+$("lb-new").addEventListener("keydown", e => { if (e.key === "Enter") createTyped(); });
 $("lb-join").onclick = joinTyped;
 $("lb-code").addEventListener("keydown", e => { if (e.key === "Enter") joinTyped(); });
-$("lb-copy").onclick = () => copy(M.name.toUpperCase(), "Match code copied.");
-$("lb-shuffle").onclick = () => { M.cfg = Object.assign({}, M.cfg, { code: randomCode() }); pushCfg(); };
-$("lb-today").onclick = () => { M.cfg = Object.assign({}, M.cfg, { code: dailyCode() }); pushCfg(); };
-$("lb-board").addEventListener("change", e => { const c = readCode(e.target.value); if (!c) { toast("Board codes use letters and numbers only."); renderLobby(); return; } M.cfg = Object.assign({}, M.cfg, { code: c }); pushCfg(); });
+$("lb-copy").onclick = () => copy(M.name.toUpperCase(), "Room code copied.");
 $("lb-start").onclick = () => {
   if (!M || !M.isHost) return;
-  const now = Date.now(), h = { rid: Math.random().toString(36).slice(2, 10), code: M.cfg.code, dur: M.cfg.dur, start: now + 4500 };
-  M.room.presence({ h, cl: now }).catch(() => {});
+  const now = Date.now();
+  M.room.presence({ h: { rid: Math.random().toString(36).slice(2, 10), code: randomCode(), dur: M.cfg.dur, start: now + 4500 }, cl: now }).catch(() => {});
 };
 $("lb-leave").onclick = () => { leaveRoom(); renderLobby(); };
 $("lb-back").onclick = () => { leaveRoom(); show("home"); };
