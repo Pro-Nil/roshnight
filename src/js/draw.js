@@ -42,6 +42,7 @@ function resize() {
   const wide = Math.min(W, H) >= 520, maxW = Math.floor((W - (wide ? 46 : 2)) / N), maxH = Math.floor((H - (wide ? 44 : 2)) / N);
   ch = Math.min(maxH, maxW);
   cw = Math.min(maxW, Math.round(ch * 1.8));
+  if (cw > ch) cw = Math.max(ch, Math.round(cw * (N - 1) / N)); // Leaves the stretched map one cell narrower.
   cs = Math.min(cw, ch);
   ox = wide ? Math.max(24, Math.floor((W - cw * N) / 2)) : Math.floor((W - cw * N) / 2);
   oy = wide ? Math.max(22, Math.floor((H - ch * N) / 2)) : Math.floor((H - ch * N) / 2);
