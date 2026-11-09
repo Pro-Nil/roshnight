@@ -22,19 +22,30 @@ Every board has a clock, and the bot's route opens only after the board ends. Ea
 
 ## Run it
 
-Open `index.html` to play alone. Live matches and leaderboards use shared storage that exists only when the page runs as a Claude artifact.
-
-After changing anything in `src/`, rebuild with:
+You need Node.js 20 or newer:
 
 ```bash
-python build.py
+node server/index.js
 ```
 
-To try live play locally, serve the repo and open `tools/test.html` in two tabs. It replaces the shared services with a local stand-in.
+It prints a link for your PC and one for your network. Leaderboards are saved in `data/`, so keep that folder private and backed up. Opening `index.html` without the server still gives you solo play.
 
-```bash
-python -m http.server 8000
-```
+After changing anything in `src/`, rebuild with `python build.py`.
+
+## Hosting it publicly
+
+Always put it behind a proxy or host that provides HTTPS, and set these:
+
+| Setting | Purpose |
+| --- | --- |
+| `PORT` | Port to listen on |
+| `TRUST_PROXY=1` | Number of proxies in front, so rate limits see real players. Leave unset if there is no proxy |
+| `HSTS=1` | Tell browsers to always use HTTPS |
+| `DATA_DIR` | Where scores are kept on a single machine |
+| `REDIS_URL` | Share rooms and scores across many server instances |
+| `SESSION_SECRET` | 32 or more random characters, the same on every instance. Required with `REDIS_URL` |
+
+Multi-instance mode has not been tested against a real Redis yet, so test it before relying on it. To run more than one instance, run `npm install` in `server/`, set `REDIS_URL` and `SESSION_SECRET`, and spread traffic across instances with a load balancer that does not buffer streams.
 
 ## Solver
 
