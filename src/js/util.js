@@ -13,5 +13,21 @@ const readCode = v => cleanCode(String(v).trim().toUpperCase());
 const still = matchMedia("(prefers-reduced-motion: reduce)").matches;
 let toastT = 0;
 function toast(msg) { const t = $("toast"); t.textContent = msg; t.hidden = false; clearTimeout(toastT); toastT = setTimeout(() => { t.hidden = true; }, 3000); }
-function copy(text, done) { const f = () => toast("Copy this code: " + text); try { navigator.clipboard.writeText(text).then(() => toast(done), f); } catch (e) { f(); } }
+// Browsers only offer the modern clipboard on https, so plain http needs the older route.
+function copyOld(text) {
+  const was = document.activeElement, t = el("textarea");
+  t.value = text; t.readOnly = true; t.style.cssText = "position:fixed;left:0;top:0;width:1px;height:1px;opacity:0;font-size:16px";
+  document.body.append(t);
+  t.focus({ preventScroll: true }); t.select(); t.setSelectionRange(0, text.length);
+  let ok = false;
+  try { ok = document.execCommand("copy"); } catch (e) {}
+  t.remove();
+  if (was && was.focus) was.focus({ preventScroll: true });
+  return ok;
+}
+function copy(text, done) {
+  const old = () => toast(copyOld(text) ? done : "Copy this: " + text);
+  if (navigator.clipboard && window.isSecureContext) navigator.clipboard.writeText(text).then(() => toast(done), old);
+  else old();
+}
 
