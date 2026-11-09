@@ -1,6 +1,6 @@
 /* ---------- Modes ---------- */
 const PRESETS = [120000, 180000, 300000, 600000];
-let soloRandom = true, soloDur = 180000;
+let soloRandom = true, soloDur = 180000, soloLevel = LEVELS[LS.get("roshnight-level")] ? LS.get("roshnight-level") : "N";
 function renderTime(boxId, minsId, cur, enabled, set) {
   const box = $(boxId); box.textContent = "";
   for (const d of PRESETS) {
@@ -43,12 +43,20 @@ function openSolo(c) { if (c) { soloRandom = false; $("so-code").value = c; } sh
 function renderSolo() {
   $("so-random").setAttribute("aria-pressed", String(soloRandom)); $("so-pick").setAttribute("aria-pressed", String(!soloRandom));
   $("so-code").hidden = soloRandom;
+  $("so-levelbox").hidden = !soloRandom;
+  const levels = $("so-level"); levels.textContent = "";
+  for (const k of Object.keys(LEVELS)) {
+    const b = el("button", "", LEVELS[k].name); b.setAttribute("aria-pressed", String(k === soloLevel));
+    b.onclick = () => { soloLevel = k; LS.set("roshnight-level", k); renderSolo(); };
+    levels.append(b);
+  }
   const daily = !soloRandom && readCode($("so-code").value) === dailyCode();
   renderTime("so-dur", "so-mins", daily ? DAILY_DUR : soloDur, !daily, d => { soloDur = d; renderSolo(); });
-  $("so-note").textContent = daily ? "That is today's board. You get one attempt on a fixed clock." : "Your best layout counts when the clock runs out.";
+  const typed = soloRandom ? null : readCode($("so-code").value), lead = soloRandom ? LEVELS[soloLevel].note + " " : typed && levelOf(typed) !== "N" ? `That code is ${LEVELS[levelOf(typed)].name === "Easy" || LEVELS[levelOf(typed)].name === "Expert" ? "an" : "a"} ${LEVELS[levelOf(typed)].name} board. ` : "";
+  $("so-note").textContent = daily ? "That is today's board. You get one attempt on a fixed clock." : lead + "Your best layout counts when the clock runs out.";
 }
 function beginSolo() {
-  if (soloRandom) { startSolo(randomCode(), soloDur); return; }
+  if (soloRandom) { startSolo(randomCode(soloLevel), soloDur); return; }
   const c = readCode($("so-code").value);
   if (!c) { toast("Enter a board code using letters and numbers."); return; }
   startSolo(c, soloDur);

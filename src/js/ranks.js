@@ -32,6 +32,7 @@ function renderRanks() {
   else if (dbState === "slow" || dbState === "error") note.textContent = "Scores can't be reached right now.";
   else if (!rows.length) note.textContent = daily && rkDay === 0 ? "Nobody has played today's board yet. Take first place." : `No scores on ${rkCode} yet.`;
   else note.textContent = "Every score is recalculated from the route that earned it.";
+  if (levelOf(rkCode) !== "N") note.textContent = `${LEVELS[levelOf(rkCode)].name} board. ${note.textContent}`;
   $("rk-play").hidden = daily && (rkDay !== 0 || mine >= 0);
 }
 function renderShared() {

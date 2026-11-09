@@ -25,7 +25,7 @@ function startGame(c, opts) {
   finished = false; lastSec = -1; lit.fill(0); bestRun = null; saved = [];
   localBest = +LS.get("roshnight-best-" + code) || null;
   $("verdict").hidden = true; $("toolbox").hidden = false;
-  $("chip").textContent = "Board " + code;
+  $("chip").textContent = (levelOf(code) === "N" ? "Board " : LEVELS[levelOf(code)].name + " ") + code;
   $("timer").classList.remove("low");
   $("pl-head").textContent = mode === "live" ? "Standings" : "Board leaders";
   startAt = opts.startAt; endAt = opts.endAt; roundDur = endAt - startAt;

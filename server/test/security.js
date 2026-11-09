@@ -154,6 +154,11 @@ async function main() {
   check('host keeps the host role after coming back', !!backSelf && backSelf.presence.own === true, back.data);
   check('the replaced tab cannot return as a second player', (await post('/api/room/join', { room: seatRoom, session: tab1 }, seatOwner.token)).status === 409);
 
+  // Difficulty levels
+  const expertCode = '0XTEST1', expertPlayer = await newPlayer(), expertRoute = legalRoute(expertCode);
+  const expertScore = await post('/api/score', { code: expertCode, r: expertRoute.route }, expertPlayer.token);
+  check('a difficulty board is scored from its own layout', expertScore.data.accepted === true && expertScore.data.entry.s === expertRoute.score, expertScore);
+
   // Switching apps on a phone
   const loneRoom = 'm-lone', loneTab = hex(16), loneHost = await newPlayer();
   await post('/api/room/create', { room: loneRoom, session: loneTab }, loneHost.token);
