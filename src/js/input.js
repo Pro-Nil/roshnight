@@ -34,7 +34,7 @@ function saveLayout(restart) {
 }
 function removeAt(i) { if (!locked && i >= 0 && P[i]) { push(); P[i] = 0; sfx.remove(); refresh(true); } }
 function undo() { if (hist.length && !locked) { P = hist.pop(); sfx.remove(); refresh(true); } }
-function cellAt(e) { const b = cv.getBoundingClientRect(), c = Math.floor((e.clientX - b.left - ox) / cs), r = Math.floor((e.clientY - b.top - oy) / cs); return r < 0 || r >= N || c < 0 || c >= N ? -1 : r * N + c; }
+function cellAt(e) { const b = cv.getBoundingClientRect(), c = Math.floor((e.clientX - b.left - ox) / cw), r = Math.floor((e.clientY - b.top - oy) / ch); return r < 0 || r >= N || c < 0 || c >= N ? -1 : r * N + c; }
 cv.addEventListener("contextmenu", e => e.preventDefault());
 cv.addEventListener("pointerdown", e => {
   if (locked) return;

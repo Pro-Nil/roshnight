@@ -308,7 +308,7 @@ button.li:hover:not(:disabled){background:var(--plate)}
     </ul>
     <p>Click a cell on the beam to place the selected piece. Hovering first shows the new route and the change in score. Click a piece to flip it, drag it to move it, right-click to remove it.</p>
     <p>Every board runs against a clock. When it ends you can open the bot's route and other players' routes to compare.</p>
-    <p>Create a room and share its code to race friends on one random board. Solo lets you pick the clock and play a random board or any code. Today's board has its own code and leaderboard each day.</p>
+    <p>Create a room and share its code to race friends on one random board. Solo lets you pick the clock and play a random board or any code. Today's board has its own code and leaderboard each day, and you get one attempt.</p>
     <button class="go" id="how-close" style="width:100%">Got it</button>
   </div>
 </div>
@@ -351,7 +351,7 @@ button.li:hover:not(:disabled){background:var(--plate)}
   function store(id, tag, code, e) {
     const d = scores.get(id) || { tag: "", boards: {} };
     if (tag) d.tag = tag;
-    d.boards[code] = { t: { r: e.r, at: e.at, d: e.d } };
+    d.boards[code] = { t: { r: e.r, at: e.at, d: e.d, s: e.s, n: e.n } };
     scores.set(id, d);
   }
   async function loadBoard(code) {
@@ -371,15 +371,34 @@ button.li:hover:not(:disabled){background:var(--plate)}
   };
   setInterval(() => { if (!document.hidden) recent.slice(0, 2).forEach(c => { if (Date.now() - (fetched.get(c) || 0) > 15000) loadBoard(c); }); }, 5000);
 
+  // Keeps one clock for everyone, using the fastest of a few round trips to the server.
+  let clockOffset = 0;
+  async function syncClock() {
+    let best = Infinity;
+    for (let i = 0; i < 5; i++) {
+      try {
+        const began = performance.now();
+        const { now } = await (await fetch("/api/time", { cache: "no-store" })).json();
+        const trip = performance.now() - began;
+        if (trip < best) { best = trip; clockOffset = now + trip / 2 - Date.now(); }
+      } catch (e) { return; }
+    }
+  }
   const ready = (async () => {
     try {
       const h = await fetch("/api/health", { cache: "no-store" });
       if (!h.ok || !(await h.json()).roshnight) return false;
       await hello();
+      syncClock();
       fetch("/api/hot").then(r => r.json()).then(j => j.codes.forEach(c => window.roshnightNeed(c))).catch(() => {});
       return true;
     } catch (e) { return false; }
   })();
+
+  window.roshnightDaily = {
+    start: async code => ((await ready) ? post("/api/daily/start", { code }) : null),
+    finish: async code => { if (await ready) post("/api/daily/finish", { code }).catch(() => {}); }
+  };
 
   async function write(data) {
     if (typeof data.tag === "string" && data.tag !== myTag) { myTag = data.tag; await post("/api/tag", { tag: data.tag }); const d = scores.get(uid); if (d) d.tag = data.tag; }
@@ -473,7 +492,7 @@ button.li:hover:not(:disabled){background:var(--plate)}
       if (left) return;
       const now = Date.now();
       if (now - heard > 40000) { heard = now; conn.abort(); }
-      if (now - eventAt < (self.presence.st === "play" ? 15000 : 4000)) return;
+      if (now - eventAt < (self.presence.st === "play" ? 15000 : 2000)) return;
       eventAt = now;
       try {
         const res = await fetch(`/api/room/peers?room=${name}&session=${session}`, { headers: { Authorization: "Bearer " + token } });
@@ -482,7 +501,7 @@ button.li:hover:not(:disabled){background:var(--plate)}
       } catch (e) {}
     }, 1000);
     const r = {
-      name, peers: list, connected: () => true,
+      name, peers: list, connected: () => true, serverNow: () => Date.now() + clockOffset,
       async presence(patch) {
         const q = Object.assign({}, self.presence);
         for (const k in patch) { if (patch[k] === null) delete q[k]; else q[k] = patch[k]; }
@@ -497,6 +516,7 @@ button.li:hover:not(:disabled){background:var(--plate)}
   }
   const room = {
     async join(name, opts) {
+      syncClock();
       const res = await post(opts && opts.create ? "/api/room/create" : "/api/room/join", { room: name, session });
       return makeRoom(name, res.peers, res.peer);
     }
@@ -783,6 +803,15 @@ function generate(code) {
   return { wall, val, src, dir, windows, ms: 9000 };
 }
 
+const DAILY_DUR = 300000;
+// A day runs midnight to midnight India time, so everyone shares one board.
+const dayKey = (off = 0) => new Date(Date.now() + 19800000 - off * 86400000).toISOString().slice(0, 10);
+function dailyCode(off = 0) {
+  const abc = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+  let n = hashCode("roshnight-day-" + dayKey(off)), s = "D";
+  for (let i = 0; i < 5; i++) { s += abc[n % 32]; n = Math.floor(n / 32); }
+  return s;
+}
 
 
 const LS = { get(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }, set(k, v) { try { localStorage.setItem(k, v); } catch (e) {} } };
@@ -795,15 +824,6 @@ const ord = n => n + (["th", "st", "nd", "rd"][(n % 100 > 10 && n % 100 < 14) ? 
 const ago = at => { const m = Math.floor((Date.now() - at) / 60000); if (!(m >= 0)) return ""; if (m < 1) return "now"; if (m < 60) return m + "m"; if (m < 1440) return Math.floor(m / 60) + "h"; return Math.floor(m / 1440) + "d"; };
 const cleanCode = s => (typeof s === "string" && /^[A-Z0-9]{1,10}$/.test(s) ? s : null);
 const readCode = v => cleanCode(String(v).trim().toUpperCase());
-const DAILY_DUR = 300000;
-// A day runs midnight to midnight India time, so everyone shares one board.
-const dayKey = (off = 0) => new Date(Date.now() + 19800000 - off * 86400000).toISOString().slice(0, 10);
-function dailyCode(off = 0) {
-  const abc = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
-  let n = hashCode("roshnight-day-" + dayKey(off)), s = "D";
-  for (let i = 0; i < 5; i++) { s += abc[n % 32]; n = Math.floor(n / 32); }
-  return s;
-}
 const still = matchMedia("(prefers-reduced-motion: reduce)").matches;
 let toastT = 0;
 function toast(msg) { const t = $("toast"); t.textContent = msg; t.hidden = false; clearTimeout(toastT); toastT = setTimeout(() => { t.hidden = true; }, 3000); }
@@ -859,6 +879,13 @@ function verify(c, r, allowEmpty) {
 let db = null, user = null, room = null, uid = null, readOnly = false, myName = "";
 const docs = new Map(), names = new Map();
 let dbState = "none", myTag = LS.get("roshnight-tag") || LS.get("lamplighter-tag") || "";
+function randomName() {
+  const pick = list => list[Math.floor(Math.random() * list.length)];
+  const first = ["Amber", "Neon", "Solar", "Lunar", "Copper", "Golden", "Silver", "Crimson", "Velvet", "Cosmic", "Swift", "Sly", "Brave", "Quiet", "Wild", "Lucky"];
+  const second = ["Tiger", "Peacock", "Mongoose", "Cobra", "Falcon", "Panther", "Firefly", "Koel", "Myna", "Lynx", "Otter", "Comet", "Diya", "Lantern", "Beacon", "Prism"];
+  for (;;) { const name = `${pick(first)} ${pick(second)} ${10 + Math.floor(Math.random() * 90)}`; if (name.length <= 16) return name; }
+}
+if (!myTag) { myTag = randomName(); LS.set("roshnight-tag", myTag); }
 const displayTag = () => (myTag || myName || "Player").slice(0, 16);
 
 async function initNet() {
@@ -895,7 +922,7 @@ function entries(c) {
     let best = null;
     for (const kind of ["t", "f"]) {
       const e = b[kind]; if (!e) continue;
-      const v = verify(c, e.r); if (!v) continue;
+      const v = e.r ? verify(c, e.r) : (Number.isFinite(e.s) && Number.isFinite(e.n) ? { score: e.s, n: e.n, Q: null } : null); if (!v) continue;
       if (!best || v.score > best.score || (v.score === best.score && v.n < best.n)) best = { id, score: v.score, n: v.n, Q: v.Q, at: +e.at || 0, d: +e.d || 0 };
     }
     if (best) out.push(best);
@@ -1000,7 +1027,7 @@ function renderRanks() {
   else if (dbState === "slow" || dbState === "error") note.textContent = "Scores can't be reached right now.";
   else if (!rows.length) note.textContent = daily && rkDay === 0 ? "Nobody has played today's board yet. Take first place." : `No scores on ${rkCode} yet.`;
   else note.textContent = "Every score is recalculated from the route that earned it.";
-  $("rk-play").hidden = daily && rkDay !== 0;
+  $("rk-play").hidden = daily && (rkDay !== 0 || mine >= 0);
 }
 function renderShared() {
   if (screen === "home") renderHome();
@@ -1015,9 +1042,9 @@ let tool = "m", orient = 1, hover = -1, dragFrom = -1, moved = false, pressed = 
 let segs = [], score = 0, lit = new Uint8Array(N * N), used = new Uint8Array(N * N), litAt = new Float64Array(N * N), floats = [];
 let ghost = null, botP = null, botScore = null, botDone = false, worker = null, overlay = null, overlayId = null;
 let bestRun = null, saved = [];
-let roundDur = 180000;
+let roundDur = 180000, dailyRun = false;
 let mode = "solo", locked = false, finished = false, blackout = false, startAt = 0, endAt = 0, revealAt = 0, lastSec = -1, localBest = null;
-let cs = 20, ox = 0, oy = 0, dpr = 1, size = 0;
+let cs = 20, cw = 20, ch = 20, ox = 0, oy = 0, dpr = 1, size = 0, sizeH = 0;
 const free = i => !B.wall[i] && !B.val[i] && i !== B.src;
 const count = () => { let m = 0, s = 0; for (let i = 0; i < N * N; i++) { if (P[i] === 1 || P[i] === 2) m++; else if (P[i] > 2) s++; } return { m, s }; };
 const rc = i => [(i / N) | 0, i % N];
@@ -1029,7 +1056,8 @@ function startGame(c, opts) {
   code = c; mode = opts.mode;
   const b = boardOf(code); B = b.B;
   trace = L.tracer(B); ghostTrace = L.tracer(B); overTrace = L.tracer(B);
-  P = new Int8Array(N * N);
+  P = opts.pieces ? Int8Array.from(opts.pieces) : new Int8Array(N * N);
+  dailyRun = !!opts.daily;
   hist = []; hover = -1; ghost = null; dragFrom = -1; moved = false; overlay = null; overlayId = null; floats = []; litAt.fill(0);
   finished = false; lastSec = -1; lit.fill(0); bestRun = null; saved = [];
   localBest = +LS.get("roshnight-best-" + code) || null;
@@ -1071,6 +1099,7 @@ function finish() {
   if (bestRun) { P = bestRun.P.slice(); hist = []; }
   refresh(false);
   offerScore(true);
+  if (dailyRun) finishDaily();
   if (M && M.rid) M.room.presence({ st: "done", sc: score, n: encode().length, r: encode() }).catch(() => {});
   renderVerdict(); renderPlayers();
   sfx.end();
@@ -1085,52 +1114,55 @@ function exitGame() {
 
 /* ---------- Drawing ---------- */
 function drawStatic() {
-  for (const c of [stat, statW]) { c.width = size * dpr; c.height = size * dpr; }
+  for (const c of [stat, statW]) { c.width = size * dpr; c.height = sizeH * dpr; }
   const g = stat.getContext("2d"); g.setTransform(dpr, 0, 0, dpr, 0, 0);
-  g.fillStyle = COLOR.night; g.fillRect(0, 0, size, size);
+  g.fillStyle = COLOR.night; g.fillRect(0, 0, size, sizeH);
   for (let k = 0; k <= N; k++) {
     g.strokeStyle = k % 5 === 0 ? COLOR.grid5 : COLOR.grid; g.lineWidth = 1;
-    g.beginPath(); g.moveTo(ox, oy + k * cs + .5); g.lineTo(ox + N * cs, oy + k * cs + .5);
-    g.moveTo(ox + k * cs + .5, oy); g.lineTo(ox + k * cs + .5, oy + N * cs); g.stroke();
+    g.beginPath(); g.moveTo(ox, oy + k * ch + .5); g.lineTo(ox + N * cw, oy + k * ch + .5);
+    g.moveTo(ox + k * cw + .5, oy); g.lineTo(ox + k * cw + .5, oy + N * ch); g.stroke();
   }
   if (ox >= 16) {
     g.fillStyle = COLOR.tick; g.font = `600 12px ${LABEL}`; g.textAlign = "center"; g.textBaseline = "middle";
-    for (let k = 5; k <= N; k += 5) { g.fillText(k, ox + (k - .5) * cs, oy - 9); g.fillText(k, ox - 11, oy + (k - .5) * cs); }
+    for (let k = 5; k <= N; k += 5) { g.fillText(k, ox + (k - .5) * cw, oy - 9); g.fillText(k, ox - 11, oy + (k - .5) * ch); }
   }
   const w = statW.getContext("2d"); w.setTransform(dpr, 0, 0, dpr, 0, 0);
   for (let i = 0; i < N * N; i++) if (B.wall[i]) {
-    const [r, c] = rc(i), x = ox + c * cs, y = oy + r * cs;
-    w.fillStyle = COLOR.block; w.fillRect(x, y, cs + 1, cs + 1);
+    const [r, c] = rc(i), x = ox + c * cw, y = oy + r * ch;
+    w.fillStyle = COLOR.block; w.fillRect(x, y, cw + 1, ch + 1);
     if (B.windows[i]) {
       w.fillStyle = "rgba(255,217,138,.3)";
       const s = Math.max(1.5, cs * .1), n = B.windows[i];
-      for (let q = 0; q < n; q++) w.fillRect(x + cs * (.25 + .25 * q), y + cs * (.3 + .2 * (q % 2)), s, s * 1.4);
+      for (let q = 0; q < n; q++) w.fillRect(x + cw * (.25 + .25 * q), y + ch * (.3 + .2 * (q % 2)), s, s * 1.4);
     }
   }
   w.strokeStyle = COLOR.edge; w.lineWidth = 1; w.beginPath();
   for (let i = 0; i < N * N; i++) if (B.wall[i]) {
-    const [r, c] = rc(i), x = ox + c * cs + .5, y = oy + r * cs + .5;
-    if (r === 0 || !B.wall[i - N]) { w.moveTo(x, y); w.lineTo(x + cs, y); }
-    if (r === N - 1 || !B.wall[i + N]) { w.moveTo(x, y + cs); w.lineTo(x + cs, y + cs); }
-    if (c === 0 || !B.wall[i - 1]) { w.moveTo(x, y); w.lineTo(x, y + cs); }
-    if (c === N - 1 || !B.wall[i + 1]) { w.moveTo(x + cs, y); w.lineTo(x + cs, y + cs); }
+    const [r, c] = rc(i), x = ox + c * cw + .5, y = oy + r * ch + .5;
+    if (r === 0 || !B.wall[i - N]) { w.moveTo(x, y); w.lineTo(x + cw, y); }
+    if (r === N - 1 || !B.wall[i + N]) { w.moveTo(x, y + ch); w.lineTo(x + cw, y + ch); }
+    if (c === 0 || !B.wall[i - 1]) { w.moveTo(x, y); w.lineTo(x, y + ch); }
+    if (c === N - 1 || !B.wall[i + 1]) { w.moveTo(x + cw, y); w.lineTo(x + cw, y + ch); }
   }
   w.stroke();
 }
 function resize() {
   if (!B || screen !== "game") return;
-  const s = Math.floor(Math.min(wrap.clientWidth, wrap.clientHeight));
-  if (s <= 0) return;
-  size = s; dpr = Math.min(window.devicePixelRatio || 1, 2);
-  cv.width = s * dpr; cv.height = s * dpr; cv.style.width = s + "px"; cv.style.height = s + "px";
-  const wide = s >= 520;
-  cs = Math.floor((s - (wide ? 44 : 2)) / N);
-  ox = wide ? 24 : Math.floor((s - cs * N) / 2);
-  oy = wide ? 22 : Math.floor((s - cs * N) / 2);
+  const W = Math.floor(wrap.clientWidth), H = Math.floor(wrap.clientHeight);
+  if (W <= 0 || H <= 0) return;
+  size = W; sizeH = H; dpr = Math.min(window.devicePixelRatio || 1, 2);
+  cv.width = W * dpr; cv.height = H * dpr; cv.style.width = W + "px"; cv.style.height = H + "px";
+  // Cells may run wider than tall so the map fills a wide screen. Pieces and targets stay in proportion.
+  const wide = Math.min(W, H) >= 520, maxW = Math.floor((W - (wide ? 46 : 2)) / N), maxH = Math.floor((H - (wide ? 44 : 2)) / N);
+  ch = Math.min(maxH, maxW);
+  cw = Math.min(maxW, Math.round(ch * 1.8));
+  cs = Math.min(cw, ch);
+  ox = wide ? Math.max(24, Math.floor((W - cw * N) / 2)) : Math.floor((W - cw * N) / 2);
+  oy = wide ? Math.max(22, Math.floor((H - ch * N) / 2)) : Math.floor((H - ch * N) / 2);
   drawStatic();
 }
-const center = (r, c) => [ox + (c + .5) * cs, oy + (r + .5) * cs];
-function ends(g) { const [r, c, d, len, end] = g, [x0, y0] = center(r, c), reach = len + (end ? .5 : 0); return [x0, y0, x0 + DC[d] * reach * cs, y0 + DR[d] * reach * cs]; }
+const center = (r, c) => [ox + (c + .5) * cw, oy + (r + .5) * ch];
+function ends(g) { const [r, c, d, len, end] = g, [x0, y0] = center(r, c), reach = len + (end ? .5 : 0); return [x0, y0, x0 + DC[d] * reach * cw, y0 + DR[d] * reach * ch]; }
 function strokeSegs(list) { ctx.beginPath(); for (const g of list) { const [a, b, x, y] = ends(g); ctx.moveTo(a, b); ctx.lineTo(x, y); } ctx.stroke(); }
 function drawPiece(i, p, alpha, color) {
   const [r, c] = rc(i), [x, y] = center(r, c), s = cs * .4, sgn = (p & 1) ? -1 : 1;
@@ -1163,11 +1195,11 @@ function drawTarget(i, t) {
 function draw(t) {
   if (!size || !B || screen !== "game") return;
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0); ctx.globalAlpha = 1; ctx.setLineDash([]);
-  ctx.drawImage(stat, 0, 0, size, size);
+  ctx.drawImage(stat, 0, 0, size, sizeH);
   if (blackout) return;
   if (revealAt && !still) ctx.globalAlpha = Math.min(1, (t - revealAt) / 500);
-  ctx.drawImage(statW, 0, 0, size, size); ctx.globalAlpha = 1;
-  if (hover >= 0 && !locked) { const [r, c] = rc(hover); ctx.fillStyle = "rgba(160,168,201,.1)"; ctx.fillRect(ox, oy + r * cs, N * cs, cs); ctx.fillRect(ox + c * cs, oy, cs, N * cs); }
+  ctx.drawImage(statW, 0, 0, size, sizeH); ctx.globalAlpha = 1;
+  if (hover >= 0 && !locked) { const [r, c] = rc(hover); ctx.fillStyle = "rgba(160,168,201,.1)"; ctx.fillRect(ox, oy + r * ch, N * cw, ch); ctx.fillRect(ox + c * cw, oy, cw, N * ch); }
   ctx.lineCap = "round"; ctx.globalCompositeOperation = "lighter";
   for (const [w, a] of [[cs * 3.4, .05], [cs * 1.5, .1], [cs * .45, .32]]) { ctx.strokeStyle = `rgba(${COLOR.sodium},${a})`; ctx.lineWidth = w; strokeSegs(segs); }
   ctx.strokeStyle = "rgb(255,240,212)"; ctx.lineWidth = Math.max(1.6, cs * .09); strokeSegs(segs);
@@ -1181,7 +1213,7 @@ function draw(t) {
   if (overlay) for (let i = 0; i < N * N; i++) if (overlay.Q[i]) drawPiece(i, overlay.Q[i], .9, `rgb(${COLOR.bot})`);
   for (let i = 0; i < N * N; i++) if (P[i] && !(dragFrom === i && moved)) drawPiece(i, P[i], used[i] ? 1 : .42);
   if (ghost) drawPiece(ghost.at, ghost.p, .78);
-  if (hover >= 0 && !locked) { const [r, c] = rc(hover); ctx.strokeStyle = COLOR.lamp; ctx.lineWidth = 1.2; ctx.strokeRect(ox + c * cs + .5, oy + r * cs + .5, cs, cs); }
+  if (hover >= 0 && !locked) { const [r, c] = rc(hover); ctx.strokeStyle = COLOR.lamp; ctx.lineWidth = 1.2; ctx.strokeRect(ox + c * cw + .5, oy + r * ch + .5, cw, ch); }
   if (floats.length) {
     ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.font = `800 ${Math.max(15, cs * .9)}px ${LABEL}`;
     floats = floats.filter(f => t - f.t0 < 800);
@@ -1229,6 +1261,7 @@ function refresh(announce) {
     const r = encode();
     if (!bestRun || score > bestRun.score || (score === bestRun.score && r.length < bestRun.n)) {
       bestRun = { score, n: r.length, r, P: P.slice() };
+      if (dailyRun) LS.set("roshnight-daily-layout-" + code, JSON.stringify(Array.from(P)));
       if (score > 0 && (localBest === null || score > localBest)) { localBest = score; LS.set("roshnight-best-" + code, String(score)); }
       offerScore(false);
       if (mode === "live" && M) M.room.presence({ sc: score, n: r.length }).catch(() => {});
@@ -1291,6 +1324,12 @@ function renderVerdict() {
     const pos = entries(code).findIndex(e => e.id === uid);
     $("vtitle").textContent = "Board over";
     $("vline").textContent = `Your best was ${fmtS(score)}${pos >= 0 ? `, ${ord(pos + 1)} on this board` : ""}.${botLine}`;
+    if (dailyRun) {
+      $("vline").textContent += " A new board arrives at midnight India time.";
+      add("See leaderboard", () => { const c = code; exitGame(); openRanks(c); }, true);
+      add("Menu", exitGame);
+      return;
+    }
     add("Play again", () => startSolo(code, roundDur), true);
     add("New game", () => { exitGame(); openSolo(); });
     add("Menu", exitGame);
@@ -1369,7 +1408,7 @@ function saveLayout(restart) {
 }
 function removeAt(i) { if (!locked && i >= 0 && P[i]) { push(); P[i] = 0; sfx.remove(); refresh(true); } }
 function undo() { if (hist.length && !locked) { P = hist.pop(); sfx.remove(); refresh(true); } }
-function cellAt(e) { const b = cv.getBoundingClientRect(), c = Math.floor((e.clientX - b.left - ox) / cs), r = Math.floor((e.clientY - b.top - oy) / cs); return r < 0 || r >= N || c < 0 || c >= N ? -1 : r * N + c; }
+function cellAt(e) { const b = cv.getBoundingClientRect(), c = Math.floor((e.clientX - b.left - ox) / cw), r = Math.floor((e.clientY - b.top - oy) / ch); return r < 0 || r >= N || c < 0 || c >= N ? -1 : r * N + c; }
 cv.addEventListener("contextmenu", e => e.preventDefault());
 cv.addEventListener("pointerdown", e => {
   if (locked) return;
@@ -1446,8 +1485,30 @@ function renderTime(boxId, minsId, cur, enabled, set) {
   m.onchange = () => set(Math.max(1, Math.min(60, Math.round(+m.value) || 3)) * 60000);
 }
 function startSolo(c, dur) {
-  const s = Date.now() + 3600, d = c === dailyCode() ? DAILY_DUR : dur;
-  startGame(c, { mode: "solo", startAt: s, endAt: s + d });
+  if (c === dailyCode()) { startDaily(); return; }
+  const s = Date.now() + 3600;
+  startGame(c, { mode: "solo", startAt: s, endAt: s + dur });
+}
+let dailyBusy = false;
+async function startDaily() {
+  if (dailyBusy) return;
+  dailyBusy = true;
+  const c = dailyCode(), doneKey = "roshnight-daily-" + c;
+  try {
+    let run = null;
+    try { run = window.roshnightDaily ? await window.roshnightDaily.start(c) : null; }
+    catch (e) { toast("Today's board can't be opened right now. Try again."); return; }
+    if (!run) run = LS.get(doneKey) ? { status: "done" } : { status: "go", toStart: 3600, left: 3600 + DAILY_DUR };
+    if (run.status === "done") { toast("You've played today's board. A new one arrives at midnight India time."); openRanks(c); return; }
+    let pieces = null;
+    if (run.status === "resume") { try { pieces = JSON.parse(LS.get("roshnight-daily-layout-" + c)); } catch (e) {} }
+    const now = Date.now();
+    startGame(c, { mode: "solo", startAt: now + run.toStart, endAt: now + run.left, daily: true, pieces: Array.isArray(pieces) && pieces.length === N * N ? pieces : null });
+  } finally { dailyBusy = false; }
+}
+function finishDaily() {
+  LS.set("roshnight-daily-" + code, "done");
+  if (window.roshnightDaily) window.roshnightDaily.finish(code);
 }
 function openSolo(c) { if (c) { soloRandom = false; $("so-code").value = c; } show("solo"); }
 function renderSolo() {
@@ -1455,7 +1516,7 @@ function renderSolo() {
   $("so-code").hidden = soloRandom;
   const daily = !soloRandom && readCode($("so-code").value) === dailyCode();
   renderTime("so-dur", "so-mins", daily ? DAILY_DUR : soloDur, !daily, d => { soloDur = d; renderSolo(); });
-  $("so-note").textContent = daily ? "That is today's board, so the clock is fixed for a fair leaderboard." : "Your best layout counts when the clock runs out.";
+  $("so-note").textContent = daily ? "That is today's board. You get one attempt on a fixed clock." : "Your best layout counts when the clock runs out.";
 }
 function beginSolo() {
   if (soloRandom) { startSolo(randomCode(), soloDur); return; }
@@ -1523,7 +1584,7 @@ function onMatchPeers() {
   const ro = roster(); M.host = ro[0] || null; M.isHost = !!(ro[0] && ro[0].sameTab);
   const hp = M.host && M.host.presence, h = hp && cleanH(hp.h);
   if (h) {
-    const off = M.host.sameTab ? 0 : M.host.updatedAt - (+hp.cl || 0);
+    const off = M.room.serverNow ? Date.now() - M.room.serverNow() : (M.host.sameTab ? 0 : M.host.updatedAt - (+hp.cl || 0));
     if (h.rid !== M.rid) {
       const s = h.start + off;
       if (s + h.dur > Date.now() + 3000) {
@@ -1583,7 +1644,7 @@ $("lb-copy").onclick = () => copy(M.name.toUpperCase(), "Room code copied.");
 $("lb-start").onclick = () => {
   if (!M || !M.isHost) return;
   const now = Date.now();
-  M.room.presence({ h: { rid: Math.random().toString(36).slice(2, 10), code: randomCode(), dur: M.cfg.dur, start: now + 4500 }, cl: now }).catch(() => {});
+  M.room.presence({ h: { rid: Math.random().toString(36).slice(2, 10), code: randomCode(), dur: M.cfg.dur, start: (M.room.serverNow ? M.room.serverNow() : now) + 4500 }, cl: now }).catch(() => {});
 };
 $("lb-leave").onclick = () => { leaveRoom(); renderLobby(); };
 $("lb-back").onclick = () => { leaveRoom(); show("home"); };
@@ -1591,7 +1652,9 @@ $("lb-back").onclick = () => { leaveRoom(); show("home"); };
 /* ---------- Home and controls ---------- */
 const tagInput = $("tag"); tagInput.value = myTag;
 tagInput.addEventListener("change", () => {
-  myTag = tagInput.value.trim().slice(0, 16); LS.set("roshnight-tag", myTag);
+  const typed = tagInput.value.trim().slice(0, 16);
+  if (!typed) { tagInput.value = myTag; return; }
+  myTag = typed; LS.set("roshnight-tag", myTag);
   if (M) M.room.presence({ tag: displayTag() }).catch(() => {});
   if (db && uid && !readOnly) writeMine({ tag: myTag });
 });

@@ -1,51 +1,54 @@
 /* ---------- Drawing ---------- */
 function drawStatic() {
-  for (const c of [stat, statW]) { c.width = size * dpr; c.height = size * dpr; }
+  for (const c of [stat, statW]) { c.width = size * dpr; c.height = sizeH * dpr; }
   const g = stat.getContext("2d"); g.setTransform(dpr, 0, 0, dpr, 0, 0);
-  g.fillStyle = COLOR.night; g.fillRect(0, 0, size, size);
+  g.fillStyle = COLOR.night; g.fillRect(0, 0, size, sizeH);
   for (let k = 0; k <= N; k++) {
     g.strokeStyle = k % 5 === 0 ? COLOR.grid5 : COLOR.grid; g.lineWidth = 1;
-    g.beginPath(); g.moveTo(ox, oy + k * cs + .5); g.lineTo(ox + N * cs, oy + k * cs + .5);
-    g.moveTo(ox + k * cs + .5, oy); g.lineTo(ox + k * cs + .5, oy + N * cs); g.stroke();
+    g.beginPath(); g.moveTo(ox, oy + k * ch + .5); g.lineTo(ox + N * cw, oy + k * ch + .5);
+    g.moveTo(ox + k * cw + .5, oy); g.lineTo(ox + k * cw + .5, oy + N * ch); g.stroke();
   }
   if (ox >= 16) {
     g.fillStyle = COLOR.tick; g.font = `600 12px ${LABEL}`; g.textAlign = "center"; g.textBaseline = "middle";
-    for (let k = 5; k <= N; k += 5) { g.fillText(k, ox + (k - .5) * cs, oy - 9); g.fillText(k, ox - 11, oy + (k - .5) * cs); }
+    for (let k = 5; k <= N; k += 5) { g.fillText(k, ox + (k - .5) * cw, oy - 9); g.fillText(k, ox - 11, oy + (k - .5) * ch); }
   }
   const w = statW.getContext("2d"); w.setTransform(dpr, 0, 0, dpr, 0, 0);
   for (let i = 0; i < N * N; i++) if (B.wall[i]) {
-    const [r, c] = rc(i), x = ox + c * cs, y = oy + r * cs;
-    w.fillStyle = COLOR.block; w.fillRect(x, y, cs + 1, cs + 1);
+    const [r, c] = rc(i), x = ox + c * cw, y = oy + r * ch;
+    w.fillStyle = COLOR.block; w.fillRect(x, y, cw + 1, ch + 1);
     if (B.windows[i]) {
       w.fillStyle = "rgba(255,217,138,.3)";
       const s = Math.max(1.5, cs * .1), n = B.windows[i];
-      for (let q = 0; q < n; q++) w.fillRect(x + cs * (.25 + .25 * q), y + cs * (.3 + .2 * (q % 2)), s, s * 1.4);
+      for (let q = 0; q < n; q++) w.fillRect(x + cw * (.25 + .25 * q), y + ch * (.3 + .2 * (q % 2)), s, s * 1.4);
     }
   }
   w.strokeStyle = COLOR.edge; w.lineWidth = 1; w.beginPath();
   for (let i = 0; i < N * N; i++) if (B.wall[i]) {
-    const [r, c] = rc(i), x = ox + c * cs + .5, y = oy + r * cs + .5;
-    if (r === 0 || !B.wall[i - N]) { w.moveTo(x, y); w.lineTo(x + cs, y); }
-    if (r === N - 1 || !B.wall[i + N]) { w.moveTo(x, y + cs); w.lineTo(x + cs, y + cs); }
-    if (c === 0 || !B.wall[i - 1]) { w.moveTo(x, y); w.lineTo(x, y + cs); }
-    if (c === N - 1 || !B.wall[i + 1]) { w.moveTo(x + cs, y); w.lineTo(x + cs, y + cs); }
+    const [r, c] = rc(i), x = ox + c * cw + .5, y = oy + r * ch + .5;
+    if (r === 0 || !B.wall[i - N]) { w.moveTo(x, y); w.lineTo(x + cw, y); }
+    if (r === N - 1 || !B.wall[i + N]) { w.moveTo(x, y + ch); w.lineTo(x + cw, y + ch); }
+    if (c === 0 || !B.wall[i - 1]) { w.moveTo(x, y); w.lineTo(x, y + ch); }
+    if (c === N - 1 || !B.wall[i + 1]) { w.moveTo(x + cw, y); w.lineTo(x + cw, y + ch); }
   }
   w.stroke();
 }
 function resize() {
   if (!B || screen !== "game") return;
-  const s = Math.floor(Math.min(wrap.clientWidth, wrap.clientHeight));
-  if (s <= 0) return;
-  size = s; dpr = Math.min(window.devicePixelRatio || 1, 2);
-  cv.width = s * dpr; cv.height = s * dpr; cv.style.width = s + "px"; cv.style.height = s + "px";
-  const wide = s >= 520;
-  cs = Math.floor((s - (wide ? 44 : 2)) / N);
-  ox = wide ? 24 : Math.floor((s - cs * N) / 2);
-  oy = wide ? 22 : Math.floor((s - cs * N) / 2);
+  const W = Math.floor(wrap.clientWidth), H = Math.floor(wrap.clientHeight);
+  if (W <= 0 || H <= 0) return;
+  size = W; sizeH = H; dpr = Math.min(window.devicePixelRatio || 1, 2);
+  cv.width = W * dpr; cv.height = H * dpr; cv.style.width = W + "px"; cv.style.height = H + "px";
+  // Cells may run wider than tall so the map fills a wide screen. Pieces and targets stay in proportion.
+  const wide = Math.min(W, H) >= 520, maxW = Math.floor((W - (wide ? 46 : 2)) / N), maxH = Math.floor((H - (wide ? 44 : 2)) / N);
+  ch = Math.min(maxH, maxW);
+  cw = Math.min(maxW, Math.round(ch * 1.8));
+  cs = Math.min(cw, ch);
+  ox = wide ? Math.max(24, Math.floor((W - cw * N) / 2)) : Math.floor((W - cw * N) / 2);
+  oy = wide ? Math.max(22, Math.floor((H - ch * N) / 2)) : Math.floor((H - ch * N) / 2);
   drawStatic();
 }
-const center = (r, c) => [ox + (c + .5) * cs, oy + (r + .5) * cs];
-function ends(g) { const [r, c, d, len, end] = g, [x0, y0] = center(r, c), reach = len + (end ? .5 : 0); return [x0, y0, x0 + DC[d] * reach * cs, y0 + DR[d] * reach * cs]; }
+const center = (r, c) => [ox + (c + .5) * cw, oy + (r + .5) * ch];
+function ends(g) { const [r, c, d, len, end] = g, [x0, y0] = center(r, c), reach = len + (end ? .5 : 0); return [x0, y0, x0 + DC[d] * reach * cw, y0 + DR[d] * reach * ch]; }
 function strokeSegs(list) { ctx.beginPath(); for (const g of list) { const [a, b, x, y] = ends(g); ctx.moveTo(a, b); ctx.lineTo(x, y); } ctx.stroke(); }
 function drawPiece(i, p, alpha, color) {
   const [r, c] = rc(i), [x, y] = center(r, c), s = cs * .4, sgn = (p & 1) ? -1 : 1;
@@ -78,11 +81,11 @@ function drawTarget(i, t) {
 function draw(t) {
   if (!size || !B || screen !== "game") return;
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0); ctx.globalAlpha = 1; ctx.setLineDash([]);
-  ctx.drawImage(stat, 0, 0, size, size);
+  ctx.drawImage(stat, 0, 0, size, sizeH);
   if (blackout) return;
   if (revealAt && !still) ctx.globalAlpha = Math.min(1, (t - revealAt) / 500);
-  ctx.drawImage(statW, 0, 0, size, size); ctx.globalAlpha = 1;
-  if (hover >= 0 && !locked) { const [r, c] = rc(hover); ctx.fillStyle = "rgba(160,168,201,.1)"; ctx.fillRect(ox, oy + r * cs, N * cs, cs); ctx.fillRect(ox + c * cs, oy, cs, N * cs); }
+  ctx.drawImage(statW, 0, 0, size, sizeH); ctx.globalAlpha = 1;
+  if (hover >= 0 && !locked) { const [r, c] = rc(hover); ctx.fillStyle = "rgba(160,168,201,.1)"; ctx.fillRect(ox, oy + r * ch, N * cw, ch); ctx.fillRect(ox + c * cw, oy, cw, N * ch); }
   ctx.lineCap = "round"; ctx.globalCompositeOperation = "lighter";
   for (const [w, a] of [[cs * 3.4, .05], [cs * 1.5, .1], [cs * .45, .32]]) { ctx.strokeStyle = `rgba(${COLOR.sodium},${a})`; ctx.lineWidth = w; strokeSegs(segs); }
   ctx.strokeStyle = "rgb(255,240,212)"; ctx.lineWidth = Math.max(1.6, cs * .09); strokeSegs(segs);
@@ -96,7 +99,7 @@ function draw(t) {
   if (overlay) for (let i = 0; i < N * N; i++) if (overlay.Q[i]) drawPiece(i, overlay.Q[i], .9, `rgb(${COLOR.bot})`);
   for (let i = 0; i < N * N; i++) if (P[i] && !(dragFrom === i && moved)) drawPiece(i, P[i], used[i] ? 1 : .42);
   if (ghost) drawPiece(ghost.at, ghost.p, .78);
-  if (hover >= 0 && !locked) { const [r, c] = rc(hover); ctx.strokeStyle = COLOR.lamp; ctx.lineWidth = 1.2; ctx.strokeRect(ox + c * cs + .5, oy + r * cs + .5, cs, cs); }
+  if (hover >= 0 && !locked) { const [r, c] = rc(hover); ctx.strokeStyle = COLOR.lamp; ctx.lineWidth = 1.2; ctx.strokeRect(ox + c * cw + .5, oy + r * ch + .5, cw, ch); }
   if (floats.length) {
     ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.font = `800 ${Math.max(15, cs * .9)}px ${LABEL}`;
     floats = floats.filter(f => t - f.t0 < 800);
