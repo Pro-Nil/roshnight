@@ -39,7 +39,8 @@ function generate(code) {
   for (let k = 0; k < 6; k++) {
     const r = 2 + ri(N - 4), c = 2 + ri(N - 4);
     if (!put(r, c, 14 + ri(12))) continue;
-    const dirs = [0, 1, 2, 3].sort(() => rnd() - 0.5);
+    const dirs = [0, 1, 2, 3];
+    for (let s = 3; s > 0; s--) { const o = ri(s + 1); [dirs[s], dirs[o]] = [dirs[o], dirs[s]]; }
     for (let g = 0; g < 2; g++) { const dist = 1 + ri(3); put(r + DR[dirs[g]] * dist, c + DC[dirs[g]] * dist, -(8 + ri(12))); }
     if (rnd() < 0.5) { const x = r + DR[dirs[2]], y = c + DC[dirs[2]], i = x * N + y; if (open(i) && !clear.has(i)) { wall[i] = 1; windows[i] = 1 + ri(3); } }
   }
