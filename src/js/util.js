@@ -10,7 +10,15 @@ const ord = n => n + (["th", "st", "nd", "rd"][(n % 100 > 10 && n % 100 < 14) ? 
 const ago = at => { const m = Math.floor((Date.now() - at) / 60000); if (!(m >= 0)) return ""; if (m < 1) return "now"; if (m < 60) return m + "m"; if (m < 1440) return Math.floor(m / 60) + "h"; return Math.floor(m / 1440) + "d"; };
 const cleanCode = s => (typeof s === "string" && /^[A-Z0-9]{1,10}$/.test(s) ? s : null);
 const readCode = v => cleanCode(String(v).trim().toUpperCase());
-const dailyCode = () => "D" + new Date().toISOString().slice(0, 10).replace(/-/g, "");
+const DAILY_DUR = 300000;
+// A day runs midnight to midnight India time, so everyone shares one board.
+const dayKey = (off = 0) => new Date(Date.now() + 19800000 - off * 86400000).toISOString().slice(0, 10);
+function dailyCode(off = 0) {
+  const abc = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+  let n = hashCode("roshnight-day-" + dayKey(off)), s = "D";
+  for (let i = 0; i < 5; i++) { s += abc[n % 32]; n = Math.floor(n / 32); }
+  return s;
+}
 const still = matchMedia("(prefers-reduced-motion: reduce)").matches;
 let toastT = 0;
 function toast(msg) { const t = $("toast"); t.textContent = msg; t.hidden = false; clearTimeout(toastT); toastT = setTimeout(() => { t.hidden = true; }, 3000); }
