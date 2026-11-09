@@ -14,8 +14,30 @@ function renderTime(boxId, minsId, cur, enabled, set) {
   m.onchange = () => set(Math.max(1, Math.min(60, Math.round(+m.value) || 3)) * 60000);
 }
 function startSolo(c, dur) {
-  const s = Date.now() + 3600, d = c === dailyCode() ? DAILY_DUR : dur;
-  startGame(c, { mode: "solo", startAt: s, endAt: s + d });
+  if (c === dailyCode()) { startDaily(); return; }
+  const s = Date.now() + 3600;
+  startGame(c, { mode: "solo", startAt: s, endAt: s + dur });
+}
+let dailyBusy = false;
+async function startDaily() {
+  if (dailyBusy) return;
+  dailyBusy = true;
+  const c = dailyCode(), doneKey = "roshnight-daily-" + c;
+  try {
+    let run = null;
+    try { run = window.roshnightDaily ? await window.roshnightDaily.start(c) : null; }
+    catch (e) { toast("Today's board can't be opened right now. Try again."); return; }
+    if (!run) run = LS.get(doneKey) ? { status: "done" } : { status: "go", toStart: 3600, left: 3600 + DAILY_DUR };
+    if (run.status === "done") { toast("You've played today's board. A new one arrives at midnight India time."); openRanks(c); return; }
+    let pieces = null;
+    if (run.status === "resume") { try { pieces = JSON.parse(LS.get("roshnight-daily-layout-" + c)); } catch (e) {} }
+    const now = Date.now();
+    startGame(c, { mode: "solo", startAt: now + run.toStart, endAt: now + run.left, daily: true, pieces: Array.isArray(pieces) && pieces.length === N * N ? pieces : null });
+  } finally { dailyBusy = false; }
+}
+function finishDaily() {
+  LS.set("roshnight-daily-" + code, "done");
+  if (window.roshnightDaily) window.roshnightDaily.finish(code);
 }
 function openSolo(c) { if (c) { soloRandom = false; $("so-code").value = c; } show("solo"); }
 function renderSolo() {
@@ -23,7 +45,7 @@ function renderSolo() {
   $("so-code").hidden = soloRandom;
   const daily = !soloRandom && readCode($("so-code").value) === dailyCode();
   renderTime("so-dur", "so-mins", daily ? DAILY_DUR : soloDur, !daily, d => { soloDur = d; renderSolo(); });
-  $("so-note").textContent = daily ? "That is today's board, so the clock is fixed for a fair leaderboard." : "Your best layout counts when the clock runs out.";
+  $("so-note").textContent = daily ? "That is today's board. You get one attempt on a fixed clock." : "Your best layout counts when the clock runs out.";
 }
 function beginSolo() {
   if (soloRandom) { startSolo(randomCode(), soloDur); return; }

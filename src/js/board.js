@@ -55,3 +55,12 @@ function generate(code) {
   return { wall, val, src, dir, windows, ms: 9000 };
 }
 
+const DAILY_DUR = 300000;
+// A day runs midnight to midnight India time, so everyone shares one board.
+const dayKey = (off = 0) => new Date(Date.now() + 19800000 - off * 86400000).toISOString().slice(0, 10);
+function dailyCode(off = 0) {
+  const abc = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+  let n = hashCode("roshnight-day-" + dayKey(off)), s = "D";
+  for (let i = 0; i < 5; i++) { s += abc[n % 32]; n = Math.floor(n / 32); }
+  return s;
+}

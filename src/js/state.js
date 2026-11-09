@@ -5,9 +5,9 @@ let tool = "m", orient = 1, hover = -1, dragFrom = -1, moved = false, pressed = 
 let segs = [], score = 0, lit = new Uint8Array(N * N), used = new Uint8Array(N * N), litAt = new Float64Array(N * N), floats = [];
 let ghost = null, botP = null, botScore = null, botDone = false, worker = null, overlay = null, overlayId = null;
 let bestRun = null, saved = [];
-let roundDur = 180000;
+let roundDur = 180000, dailyRun = false;
 let mode = "solo", locked = false, finished = false, blackout = false, startAt = 0, endAt = 0, revealAt = 0, lastSec = -1, localBest = null;
-let cs = 20, ox = 0, oy = 0, dpr = 1, size = 0;
+let cs = 20, cw = 20, ch = 20, ox = 0, oy = 0, dpr = 1, size = 0, sizeH = 0;
 const free = i => !B.wall[i] && !B.val[i] && i !== B.src;
 const count = () => { let m = 0, s = 0; for (let i = 0; i < N * N; i++) { if (P[i] === 1 || P[i] === 2) m++; else if (P[i] > 2) s++; } return { m, s }; };
 const rc = i => [(i / N) | 0, i % N];
@@ -19,7 +19,8 @@ function startGame(c, opts) {
   code = c; mode = opts.mode;
   const b = boardOf(code); B = b.B;
   trace = L.tracer(B); ghostTrace = L.tracer(B); overTrace = L.tracer(B);
-  P = new Int8Array(N * N);
+  P = opts.pieces ? Int8Array.from(opts.pieces) : new Int8Array(N * N);
+  dailyRun = !!opts.daily;
   hist = []; hover = -1; ghost = null; dragFrom = -1; moved = false; overlay = null; overlayId = null; floats = []; litAt.fill(0);
   finished = false; lastSec = -1; lit.fill(0); bestRun = null; saved = [];
   localBest = +LS.get("roshnight-best-" + code) || null;
@@ -61,6 +62,7 @@ function finish() {
   if (bestRun) { P = bestRun.P.slice(); hist = []; }
   refresh(false);
   offerScore(true);
+  if (dailyRun) finishDaily();
   if (M && M.rid) M.room.presence({ st: "done", sc: score, n: encode().length, r: encode() }).catch(() => {});
   renderVerdict(); renderPlayers();
   sfx.end();

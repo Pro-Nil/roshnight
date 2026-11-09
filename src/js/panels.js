@@ -29,6 +29,7 @@ function refresh(announce) {
     const r = encode();
     if (!bestRun || score > bestRun.score || (score === bestRun.score && r.length < bestRun.n)) {
       bestRun = { score, n: r.length, r, P: P.slice() };
+      if (dailyRun) LS.set("roshnight-daily-layout-" + code, JSON.stringify(Array.from(P)));
       if (score > 0 && (localBest === null || score > localBest)) { localBest = score; LS.set("roshnight-best-" + code, String(score)); }
       offerScore(false);
       if (mode === "live" && M) M.room.presence({ sc: score, n: r.length }).catch(() => {});
@@ -91,6 +92,12 @@ function renderVerdict() {
     const pos = entries(code).findIndex(e => e.id === uid);
     $("vtitle").textContent = "Board over";
     $("vline").textContent = `Your best was ${fmtS(score)}${pos >= 0 ? `, ${ord(pos + 1)} on this board` : ""}.${botLine}`;
+    if (dailyRun) {
+      $("vline").textContent += " A new board arrives at midnight India time.";
+      add("See leaderboard", () => { const c = code; exitGame(); openRanks(c); }, true);
+      add("Menu", exitGame);
+      return;
+    }
     add("Play again", () => startSolo(code, roundDur), true);
     add("New game", () => { exitGame(); openSolo(); });
     add("Menu", exitGame);

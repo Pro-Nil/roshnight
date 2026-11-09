@@ -14,7 +14,7 @@ The same board code always generates the same city.
 
 ## Modes
 
-- **Today's board:** a new code every day (midnight India time), a fixed 5-minute clock and its own leaderboard with that day's stats.
+- **Today's board:** a new code every day (midnight India time), one attempt on a fixed 5-minute clock, and its own leaderboard with that day's stats. Routes stay hidden until the day ends.
 - **Multiplayer:** anyone can create a room and share its code. The host sets the time, and starting gives everyone the same random board.
 - **Solo:** pick the time, then play a random board or any board code.
 
