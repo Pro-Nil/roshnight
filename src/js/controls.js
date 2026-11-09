@@ -22,6 +22,7 @@ $("t-s").onclick = () => setTool("s");
 $("t-e").onclick = () => setTool("e");
 $("flip").onclick = () => { if (!locked) flipOrient(); };
 $("undo").onclick = undo;
+$("redo").onclick = redo;
 $("clear").onclick = () => { if (!locked && P.some(Boolean)) { push(); P.fill(0); sfx.remove(); refresh(true); } };
 $("keep").onclick = () => saveLayout(false);
 $("keepnew").onclick = () => saveLayout(true);

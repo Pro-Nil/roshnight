@@ -1,6 +1,6 @@
 /* ---------- Game state ---------- */
 const cv = $("cv"), ctx = cv.getContext("2d"), wrap = $("wrap"), stat = document.createElement("canvas"), statW = document.createElement("canvas");
-let B, code, trace, ghostTrace, overTrace, P = new Int8Array(N * N), hist = [];
+let B, code, trace, ghostTrace, overTrace, P = new Int8Array(N * N), hist = [], future = [];
 let tool = "m", orient = 1, hover = -1, dragFrom = -1, moved = false, pressed = false, touching = false;
 let segs = [], score = 0, lit = new Uint8Array(N * N), used = new Uint8Array(N * N), litAt = new Float64Array(N * N), floats = [];
 let ghost = null, botP = null, botScore = null, botDone = false, worker = null, overlay = null, overlayId = null;
@@ -21,7 +21,7 @@ function startGame(c, opts) {
   trace = L.tracer(B); ghostTrace = L.tracer(B); overTrace = L.tracer(B);
   P = opts.pieces ? Int8Array.from(opts.pieces) : new Int8Array(N * N);
   dailyRun = !!opts.daily;
-  hist = []; hover = -1; ghost = null; dragFrom = -1; moved = false; overlay = null; overlayId = null; floats = []; litAt.fill(0);
+  hist = []; future = []; hover = -1; ghost = null; dragFrom = -1; moved = false; overlay = null; overlayId = null; floats = []; litAt.fill(0);
   finished = false; lastSec = -1; lit.fill(0); bestRun = null; saved = [];
   localBest = +LS.get("roshnight-best-" + code) || null;
   $("verdict").hidden = true; $("toolbox").hidden = false;
@@ -59,7 +59,7 @@ function finish() {
   finished = true; locked = true; hover = -1; ghost = null; dragFrom = -1; pressed = false;
   $("count").hidden = true; blackout = false;
   $("toolbox").hidden = true; $("verdict").hidden = false;
-  if (bestRun) { P = bestRun.P.slice(); hist = []; }
+  if (bestRun) { P = bestRun.P.slice(); hist = []; future = []; }
   refresh(false);
   offerScore(true);
   if (dailyRun) finishDaily();

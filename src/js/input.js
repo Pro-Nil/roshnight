@@ -1,5 +1,5 @@
 /* ---------- Input ---------- */
-function push() { hist.push(P.slice()); if (hist.length > 200) hist.shift(); }
+function push() { hist.push(P.slice()); if (hist.length > 200) hist.shift(); future = []; }
 function setTool(t) { if (t !== "e" && tool === t) { flipOrient(); return; } tool = t; for (const k of ["m", "s", "e"]) $("t-" + k).setAttribute("aria-pressed", String(k === t)); makeGhost(); }
 function flipOrient() { orient = orient === 1 ? 2 : 1; refresh(false); }
 function act(i) {
@@ -33,7 +33,8 @@ function saveLayout(restart) {
   else { sfx.place(); renderChips(); toast(`Layout ${at + 1} saved.`); }
 }
 function removeAt(i) { if (!locked && i >= 0 && P[i]) { push(); P[i] = 0; sfx.remove(); refresh(true); } }
-function undo() { if (hist.length && !locked) { P = hist.pop(); sfx.remove(); refresh(true); } }
+function undo() { if (hist.length && !locked) { future.push(P.slice()); P = hist.pop(); sfx.remove(); refresh(true); } }
+function redo() { if (future.length && !locked) { hist.push(P.slice()); P = future.pop(); sfx.place(); refresh(true); } }
 function cellAt(e) { const b = cv.getBoundingClientRect(), c = Math.floor((e.clientX - b.left - ox) / cw), r = Math.floor((e.clientY - b.top - oy) / ch); return r < 0 || r >= N || c < 0 || c >= N ? -1 : r * N + c; }
 cv.addEventListener("contextmenu", e => e.preventDefault());
 cv.addEventListener("pointerdown", e => {
@@ -61,12 +62,14 @@ document.addEventListener("keydown", e => {
   if (e.target.tagName === "INPUT" || screen !== "game") return;
   const k = e.key.toLowerCase();
   if ((e.ctrlKey || e.metaKey) && k === "z") { e.preventDefault(); undo(); return; }
+  if ((e.ctrlKey || e.metaKey) && k === "y") { e.preventDefault(); redo(); return; }
   if (e.ctrlKey || e.metaKey || e.altKey) return;
   if (k === "m" || k === "1") setTool("m");
   else if (k === "s" || k === "2") setTool("s");
   else if (k === "e" || k === "3") setTool("e");
   else if (k === "r" && !locked) flipOrient();
   else if (k === "z") undo();
+  else if (k === "y") redo();
   else if (k === "n") saveLayout(true);
   else if (document.activeElement === cv && k.startsWith("arrow")) {
     e.preventDefault(); if (hover < 0) hover = B.src;

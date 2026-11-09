@@ -182,9 +182,8 @@ input{font:600 18px/1 var(--label);letter-spacing:.08em;color:var(--ink);backgro
   #toolbox{display:grid;grid-template-columns:repeat(12,minmax(0,1fr));gap:5px}
   #toolbox .tools,#toolbox .row{display:contents}
   #t-m,#t-s{grid-column:span 3}
-  #t-e,#flip,#undo,#clear{grid-column:span 2}
-  #keep,#lockin{grid-column:span 3}
-  #keepnew{grid-column:span 4}
+  #t-e,#undo,#redo,#flip,#clear,#keep{grid-column:span 2}
+  #keepnew,#lockin{grid-column:span 3}
   #lockin{margin:0!important;width:auto!important}
   #toolbox button{font-size:15px;padding:5px 4px;min-width:0}
   #chips{grid-column:1/-1;order:9;margin:0}
@@ -343,8 +342,9 @@ input{font:600 18px/1 var(--label);letter-spacing:.08em;color:var(--ink);backgro
         <button class="tool" id="t-e" aria-pressed="false"><span>Erase</span><span class="kbd">E</span></button>
       </div>
       <div class="row" style="margin-top:6px">
-        <button id="flip">Flip <span class="kbd">R</span></button>
         <button id="undo">Undo <span class="kbd">Z</span></button>
+        <button id="redo">Redo <span class="kbd">Y</span></button>
+        <button id="flip">Flip <span class="kbd">R</span></button>
         <button id="clear">Clear</button>
       </div>
       <div class="row" style="margin-top:6px">
@@ -1163,7 +1163,7 @@ function renderShared() {
 
 /* ---------- Game state ---------- */
 const cv = $("cv"), ctx = cv.getContext("2d"), wrap = $("wrap"), stat = document.createElement("canvas"), statW = document.createElement("canvas");
-let B, code, trace, ghostTrace, overTrace, P = new Int8Array(N * N), hist = [];
+let B, code, trace, ghostTrace, overTrace, P = new Int8Array(N * N), hist = [], future = [];
 let tool = "m", orient = 1, hover = -1, dragFrom = -1, moved = false, pressed = false, touching = false;
 let segs = [], score = 0, lit = new Uint8Array(N * N), used = new Uint8Array(N * N), litAt = new Float64Array(N * N), floats = [];
 let ghost = null, botP = null, botScore = null, botDone = false, worker = null, overlay = null, overlayId = null;
@@ -1184,7 +1184,7 @@ function startGame(c, opts) {
   trace = L.tracer(B); ghostTrace = L.tracer(B); overTrace = L.tracer(B);
   P = opts.pieces ? Int8Array.from(opts.pieces) : new Int8Array(N * N);
   dailyRun = !!opts.daily;
-  hist = []; hover = -1; ghost = null; dragFrom = -1; moved = false; overlay = null; overlayId = null; floats = []; litAt.fill(0);
+  hist = []; future = []; hover = -1; ghost = null; dragFrom = -1; moved = false; overlay = null; overlayId = null; floats = []; litAt.fill(0);
   finished = false; lastSec = -1; lit.fill(0); bestRun = null; saved = [];
   localBest = +LS.get("roshnight-best-" + code) || null;
   $("verdict").hidden = true; $("toolbox").hidden = false;
@@ -1222,7 +1222,7 @@ function finish() {
   finished = true; locked = true; hover = -1; ghost = null; dragFrom = -1; pressed = false;
   $("count").hidden = true; blackout = false;
   $("toolbox").hidden = true; $("verdict").hidden = false;
-  if (bestRun) { P = bestRun.P.slice(); hist = []; }
+  if (bestRun) { P = bestRun.P.slice(); hist = []; future = []; }
   refresh(false);
   offerScore(true);
   if (dailyRun) finishDaily();
@@ -1382,6 +1382,7 @@ function refresh(announce) {
   ticks("tm", CM, CM - m); ticks("ts", CS, CS - s);
   $("gm").textContent = $("gs").textContent = glyph(orient);
   $("undo").disabled = !hist.length || locked;
+  $("redo").disabled = !future.length || locked;
   $("clear").disabled = locked;
   $("flip").disabled = locked;
   if (!blackout && !finished) {
@@ -1502,7 +1503,7 @@ const TAP = COARSE ? "Tap" : "Click";
 function hint() { $("read").textContent = COARSE ? "Tap a cell on the beam. Press and slide to aim." : "Click a cell on the beam to place a piece. Press R to flip its direction first."; }
 
 /* ---------- Input ---------- */
-function push() { hist.push(P.slice()); if (hist.length > 200) hist.shift(); }
+function push() { hist.push(P.slice()); if (hist.length > 200) hist.shift(); future = []; }
 function setTool(t) { if (t !== "e" && tool === t) { flipOrient(); return; } tool = t; for (const k of ["m", "s", "e"]) $("t-" + k).setAttribute("aria-pressed", String(k === t)); makeGhost(); }
 function flipOrient() { orient = orient === 1 ? 2 : 1; refresh(false); }
 function act(i) {
@@ -1536,7 +1537,8 @@ function saveLayout(restart) {
   else { sfx.place(); renderChips(); toast(`Layout ${at + 1} saved.`); }
 }
 function removeAt(i) { if (!locked && i >= 0 && P[i]) { push(); P[i] = 0; sfx.remove(); refresh(true); } }
-function undo() { if (hist.length && !locked) { P = hist.pop(); sfx.remove(); refresh(true); } }
+function undo() { if (hist.length && !locked) { future.push(P.slice()); P = hist.pop(); sfx.remove(); refresh(true); } }
+function redo() { if (future.length && !locked) { hist.push(P.slice()); P = future.pop(); sfx.place(); refresh(true); } }
 function cellAt(e) { const b = cv.getBoundingClientRect(), c = Math.floor((e.clientX - b.left - ox) / cw), r = Math.floor((e.clientY - b.top - oy) / ch); return r < 0 || r >= N || c < 0 || c >= N ? -1 : r * N + c; }
 cv.addEventListener("contextmenu", e => e.preventDefault());
 cv.addEventListener("pointerdown", e => {
@@ -1564,12 +1566,14 @@ document.addEventListener("keydown", e => {
   if (e.target.tagName === "INPUT" || screen !== "game") return;
   const k = e.key.toLowerCase();
   if ((e.ctrlKey || e.metaKey) && k === "z") { e.preventDefault(); undo(); return; }
+  if ((e.ctrlKey || e.metaKey) && k === "y") { e.preventDefault(); redo(); return; }
   if (e.ctrlKey || e.metaKey || e.altKey) return;
   if (k === "m" || k === "1") setTool("m");
   else if (k === "s" || k === "2") setTool("s");
   else if (k === "e" || k === "3") setTool("e");
   else if (k === "r" && !locked) flipOrient();
   else if (k === "z") undo();
+  else if (k === "y") redo();
   else if (k === "n") saveLayout(true);
   else if (document.activeElement === cv && k.startsWith("arrow")) {
     e.preventDefault(); if (hover < 0) hover = B.src;
@@ -1804,6 +1808,7 @@ $("t-s").onclick = () => setTool("s");
 $("t-e").onclick = () => setTool("e");
 $("flip").onclick = () => { if (!locked) flipOrient(); };
 $("undo").onclick = undo;
+$("redo").onclick = redo;
 $("clear").onclick = () => { if (!locked && P.some(Boolean)) { push(); P.fill(0); sfx.remove(); refresh(true); } };
 $("keep").onclick = () => saveLayout(false);
 $("keepnew").onclick = () => saveLayout(true);

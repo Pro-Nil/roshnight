@@ -168,9 +168,8 @@ input{font:600 18px/1 var(--label);letter-spacing:.08em;color:var(--ink);backgro
   #toolbox{display:grid;grid-template-columns:repeat(12,minmax(0,1fr));gap:5px}
   #toolbox .tools,#toolbox .row{display:contents}
   #t-m,#t-s{grid-column:span 3}
-  #t-e,#flip,#undo,#clear{grid-column:span 2}
-  #keep,#lockin{grid-column:span 3}
-  #keepnew{grid-column:span 4}
+  #t-e,#undo,#redo,#flip,#clear,#keep{grid-column:span 2}
+  #keepnew,#lockin{grid-column:span 3}
   #lockin{margin:0!important;width:auto!important}
   #toolbox button{font-size:15px;padding:5px 4px;min-width:0}
   #chips{grid-column:1/-1;order:9;margin:0}

@@ -23,6 +23,7 @@ function refresh(announce) {
   ticks("tm", CM, CM - m); ticks("ts", CS, CS - s);
   $("gm").textContent = $("gs").textContent = glyph(orient);
   $("undo").disabled = !hist.length || locked;
+  $("redo").disabled = !future.length || locked;
   $("clear").disabled = locked;
   $("flip").disabled = locked;
   if (!blackout && !finished) {
