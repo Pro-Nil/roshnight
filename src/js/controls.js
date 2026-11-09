@@ -1,7 +1,9 @@
 /* ---------- Home and controls ---------- */
 const tagInput = $("tag"); tagInput.value = myTag;
 tagInput.addEventListener("change", () => {
-  myTag = tagInput.value.trim().slice(0, 16); LS.set("roshnight-tag", myTag);
+  const typed = tagInput.value.trim().slice(0, 16);
+  if (!typed) { tagInput.value = myTag; return; }
+  myTag = typed; LS.set("roshnight-tag", myTag);
   if (M) M.room.presence({ tag: displayTag() }).catch(() => {});
   if (db && uid && !readOnly) writeMine({ tag: myTag });
 });

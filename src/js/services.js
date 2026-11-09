@@ -2,6 +2,13 @@
 let db = null, user = null, room = null, uid = null, readOnly = false, myName = "";
 const docs = new Map(), names = new Map();
 let dbState = "none", myTag = LS.get("roshnight-tag") || LS.get("lamplighter-tag") || "";
+function randomName() {
+  const pick = list => list[Math.floor(Math.random() * list.length)];
+  const first = ["Amber", "Neon", "Solar", "Lunar", "Copper", "Golden", "Silver", "Crimson", "Velvet", "Cosmic", "Swift", "Sly", "Brave", "Quiet", "Wild", "Lucky"];
+  const second = ["Tiger", "Peacock", "Mongoose", "Cobra", "Falcon", "Panther", "Firefly", "Koel", "Myna", "Lynx", "Otter", "Comet", "Diya", "Lantern", "Beacon", "Prism"];
+  for (;;) { const name = `${pick(first)} ${pick(second)} ${10 + Math.floor(Math.random() * 90)}`; if (name.length <= 16) return name; }
+}
+if (!myTag) { myTag = randomName(); LS.set("roshnight-tag", myTag); }
 const displayTag = () => (myTag || myName || "Player").slice(0, 16);
 
 async function initNet() {
@@ -38,7 +45,7 @@ function entries(c) {
     let best = null;
     for (const kind of ["t", "f"]) {
       const e = b[kind]; if (!e) continue;
-      const v = verify(c, e.r); if (!v) continue;
+      const v = e.r ? verify(c, e.r) : (Number.isFinite(e.s) && Number.isFinite(e.n) ? { score: e.s, n: e.n, Q: null } : null); if (!v) continue;
       if (!best || v.score > best.score || (v.score === best.score && v.n < best.n)) best = { id, score: v.score, n: v.n, Q: v.Q, at: +e.at || 0, d: +e.d || 0 };
     }
     if (best) out.push(best);
