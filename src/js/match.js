@@ -3,30 +3,40 @@ let M = null, entering = false;
 const pause = ms => new Promise(r => setTimeout(r, ms));
 const ROOM_RE = /^[a-z0-9]{3,10}$/;
 function randomRoom() { const a = "abcdefghjkmnpqrstuvwxyz23456789"; let s = ""; for (let i = 0; i < 5; i++) s += a[Math.floor(Math.random() * a.length)]; return s; }
-function setBusy(on) { entering = on; for (const id of ["lb-create", "lb-join"]) $(id).disabled = on || !room; }
+let roomError = "";
+function setBusy(on, create) {
+  entering = on;
+  for (const id of ["lb-create", "lb-join"]) $(id).disabled = on || !room;
+  $("lb-create").textContent = on && create ? "Creating room" : "Create room";
+  $("lb-join").textContent = on && !create ? "Looking for room" : "Join room";
+}
 async function enterRoom(name, create) {
   if (!room || entering) return;
-  setBusy(true);
+  roomError = "";
+  setBusy(true, create);
   try {
     if (M) leaveRoom();
     let r;
-    try { r = await room.join("m-" + name); } catch (e) { toast("That room can't be opened right now. Try again."); return; }
+    try { r = await room.join("m-" + name); }
+    catch (e) {
+      roomError = e && e.code === "not_permitted" ? "This account isn't allowed to use rooms on this page." : `The room couldn't be opened${e && e.code ? ` (${e.code})` : ""}. Try again.`;
+      return;
+    }
     const j = Date.now(), m = { name, room: r, j, cfg: { dur: 180000 }, rid: null, off: Infinity, isHost: false, host: null };
     M = m;
     m.un = r.onPeers(onMatchPeers, () => { toast("The connection to this room was lost."); leaveRoom(); show("home"); });
     const hasOwner = () => roster().some(p => !p.sameTab && p.presence.own === true);
-    if (create) {
-      await pause(1500);
-      if (M !== m) return;
-      if (hasOwner()) { leaveRoom(); toast(`Room ${name.toUpperCase()} is already in use. Pick another code.`); return; }
-    } else {
+    if (!create) {
       for (const t0 = Date.now(); Date.now() - t0 < 3000 && !hasOwner();) await pause(150);
       if (M !== m) return;
       if (!hasOwner()) { leaveRoom(); toast(`No room found with code ${name.toUpperCase()}. Check it with your friend.`); return; }
     }
     r.presence({ tag: displayTag(), j, cl: j, st: "lobby", sc: 0, n: 0, r: null, rid: null, h: null, own: create ? true : null, cfg: m.cfg }).catch(() => {});
     show("lobby");
-  } finally { setBusy(false); }
+  } finally {
+    setBusy(false);
+    if (screen === "lobby") renderLobby();
+  }
 }
 function roster() {
   if (!M) return [];
@@ -64,7 +74,8 @@ function hostDur() { const c = M.host && M.host.presence && M.host.presence.cfg,
 function renderLobby() {
   const inRoom = !!M && !entering;
   $("lb-out").hidden = inRoom; $("lb-in").hidden = !inRoom;
-  $("lb-off").hidden = !!room;
+  $("lb-off").hidden = !!room && !roomError;
+  $("lb-off").textContent = roomError || "Multiplayer needs the Claude page and access to it. You can still play solo.";
   if (!entering) { $("lb-create").disabled = !room; $("lb-join").disabled = !room; }
   if (!inRoom) return;
   $("lb-room").textContent = M.name.toUpperCase();
@@ -91,18 +102,12 @@ function leaveRoom() {
   try { m.un && m.un(); } catch (e) {}
   m.room.leave().catch(() => {});
 }
-function createTyped() {
-  const v = $("lb-new").value.trim().toLowerCase() || randomRoom();
-  if (!ROOM_RE.test(v)) { toast("Room codes use 3 to 10 letters or numbers."); return; }
-  enterRoom(v, true);
-}
 function joinTyped() {
   const v = $("lb-code").value.trim().toLowerCase();
   if (!ROOM_RE.test(v)) { toast("Room codes use 3 to 10 letters or numbers."); return; }
   enterRoom(v, false);
 }
-$("lb-create").onclick = createTyped;
-$("lb-new").addEventListener("keydown", e => { if (e.key === "Enter") createTyped(); });
+$("lb-create").onclick = () => enterRoom(randomRoom(), true);
 $("lb-join").onclick = joinTyped;
 $("lb-code").addEventListener("keydown", e => { if (e.key === "Enter") joinTyped(); });
 $("lb-copy").onclick = () => copy(M.name.toUpperCase(), "Room code copied.");
