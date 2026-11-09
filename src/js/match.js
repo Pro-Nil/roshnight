@@ -115,6 +115,7 @@ $("lb-create").onclick = () => enterRoom(randomRoom(), true);
 $("lb-join").onclick = joinTyped;
 $("lb-code").addEventListener("keydown", e => { if (e.key === "Enter") joinTyped(); });
 $("lb-copy").onclick = () => copy(M.name.toUpperCase(), "Room code copied.");
+$("lb-share").append(shareRow(() => `Race me on Roshnight! Join my room ${M.name.toUpperCase()}: ${pageLink("?room=" + M.name.toUpperCase())}`));
 $("lb-start").onclick = () => {
   if (!M || !M.isHost) return;
   const now = Date.now();

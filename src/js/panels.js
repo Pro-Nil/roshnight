@@ -86,6 +86,7 @@ function renderPlayers() {
 function renderVerdict() {
   if (!finished || screen !== "game") return;
   const btns = $("vbtns"); btns.textContent = "";
+  if (!$("vshare").firstChild) $("vshare").append(shareRow(() => `I scored ${fmtS(score)} on ${dailyRun ? "today's Roshnight board" : "Roshnight board " + code}. Can you beat it? ${pageLink(dailyRun ? "" : "?board=" + code)}`));
   const add = (t, f, go) => { const b = el("button", go ? "go" : "", t); b.onclick = f; btns.append(b); };
   const botLine = botDone ? ` The bot found ${fmtS(botScore)}. Select it to see its route.` : " The bot's route opens here when its search finishes.";
   if (mode === "solo") {

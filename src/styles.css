@@ -69,6 +69,9 @@ button.li:hover:not(:disabled){background:var(--plate)}
 .stats{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px}
 .stat{background:var(--street);border:1px solid var(--kerb);padding:10px}
 .stat b{display:block;font:800 36px/1 var(--display);font-variant-numeric:tabular-nums;margin-top:5px}
+.share{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px;margin-top:10px}
+.sh{display:flex;align-items:center;justify-content:center;gap:7px;min-height:44px;padding:8px 6px;background:var(--street);border:1px solid var(--kerb);color:var(--ink);font:600 16px/1.1 var(--label);letter-spacing:.03em;text-decoration:none;cursor:pointer}
+.sh svg{flex:none}
 .rcode{font:900 clamp(50px,9vw,84px)/.9 var(--display);letter-spacing:.06em;color:var(--lamp)}
 
 /* Play */

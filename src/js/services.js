@@ -29,6 +29,14 @@ async function initNet() {
   }
   if (db && uid && myTag) writeMine({ tag: myTag.slice(0, 16) });
   renderLobby(); renderShared();
+  openSharedLink();
+}
+// A shared link opens the room or board it names, then tidies the address bar.
+function openSharedLink() {
+  const q = new URLSearchParams(location.search), rm = (q.get("room") || "").toLowerCase(), bd = readCode(q.get("board") || "");
+  if (rm || bd) history.replaceState(null, "", location.pathname);
+  if (rm && ROOM_RE.test(rm) && room) { show("lobby"); enterRoom(rm, false); }
+  else if (bd) openRanks(bd);
 }
 function resolveNames() {
   if (!user) return;
