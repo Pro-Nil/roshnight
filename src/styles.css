@@ -65,6 +65,10 @@ button.li:hover:not(:disabled){background:var(--plate)}
 .seg button{flex:1 1 0;min-width:0;margin-left:-1px}
 .seg button[aria-pressed="true"]{background:var(--sodium);border-color:var(--sodium);color:var(--night);position:relative}
 .note{color:var(--mute);font-size:14px;margin:0}
+.mins{display:grid;grid-template-columns:minmax(0,1fr) 96px;gap:12px;align-items:center;margin-top:10px}
+.stats{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px}
+.stat{background:var(--street);border:1px solid var(--kerb);padding:10px}
+.stat b{display:block;font:800 36px/1 var(--display);font-variant-numeric:tabular-nums;margin-top:5px}
 .rcode{font:900 clamp(50px,9vw,84px)/.9 var(--display);letter-spacing:.06em;color:var(--lamp)}
 
 /* Play */
@@ -129,5 +133,6 @@ button.li:hover:not(:disabled){background:var(--plate)}
   #score,#bestv,#timer{font-size:50px}
   .tr{grid-template-columns:32px minmax(0,1fr) 62px 52px}
   .tr .wide{display:none}
+  .stats{grid-template-columns:repeat(2,minmax(0,1fr))}
 }
 @media (prefers-reduced-motion:reduce){*{transition:none!important}}

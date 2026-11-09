@@ -13,51 +13,65 @@
     <p class="tag">One beam. Twelve mirrors. Two splitters. Light the city first.</p>
     <nav class="menu">
       <button class="mi first" id="m-daily"><b>Today's board</b><span id="m-daily-s"></span></button>
-      <button class="mi" id="m-live"><b>Live match</b><span id="m-live-s">Same board, same clock</span></button>
-      <button class="mi" id="m-trial"><b>Time trial</b><span>3:00 on a new board</span></button>
-      <button class="mi" id="m-free"><b>Free play</b><span>No clock</span></button>
-      <button class="mi" id="m-ranks"><b>Leaderboards</b><span>Any board code</span></button>
+      <button class="mi" id="m-multi"><b>Multiplayer</b><span>Create or join a room</span></button>
+      <button class="mi" id="m-solo"><b>Solo</b><span>Random or any board code</span></button>
+      <button class="mi" id="m-ranks"><b>Leaderboards</b><span>Daily and any board code</span></button>
       <button class="mi" id="m-how"><b>How to play</b><span></span></button>
     </nav>
     <label class="sign"><span class="lab">Your name</span><input id="tag" maxlength="16" autocomplete="off" spellcheck="false" placeholder="Name on the leaderboard"></label>
   </section>
   <section class="board-col">
-    <div class="plate"><h2>Open matches <em id="online"></em></h2><div class="list" id="openlist"></div></div>
+    <div class="plate"><h2>Today's leaders <em id="daycode"></em></h2><div class="list" id="dayboard"></div></div>
     <div class="plate"><h2>Busiest boards</h2><div class="list" id="hot"></div></div>
   </section>
 </div>
 
 <div id="lobby" class="screen gut" hidden>
   <div class="sub-screen">
-    <div class="bar"><h2>Live match</h2><button id="lb-back">Menu</button></div>
+    <div class="bar"><h2>Multiplayer</h2><button id="lb-back">Menu</button></div>
     <div id="lb-out" class="sub-screen" style="padding:0">
       <div class="plate">
-        <h2>Start one</h2>
-        <button class="go" id="lb-create" style="width:100%">Create a match</button>
+        <h2>Create a room</h2>
+        <div class="row"><input id="lb-new" class="up" maxlength="10" aria-label="Room code" autocomplete="off" spellcheck="false" placeholder="Code, or blank for random"><button class="go" id="lb-create">Create room</button></div>
       </div>
       <div class="plate">
-        <h2>Join with a code</h2>
-        <div class="row"><input id="lb-code" class="up" maxlength="5" aria-label="Match code" autocomplete="off" spellcheck="false" placeholder="Match code"><button id="lb-join">Join</button></div>
+        <h2>Join a room</h2>
+        <div class="row"><input id="lb-code" class="up" maxlength="10" aria-label="Room code to join" autocomplete="off" spellcheck="false" placeholder="Code from your friend"><button id="lb-join">Join room</button></div>
       </div>
-      <div class="plate"><h2>Open matches</h2><div class="list" id="openlist2"></div></div>
-      <p class="note" id="lb-off" hidden>Live matches work for people who have edit access to this page. You can still play alone.</p>
+      <p class="note" id="lb-off" hidden>Multiplayer needs access to this page. You can still play solo.</p>
     </div>
     <div id="lb-in" class="sub-screen" style="padding:0" hidden>
       <div class="plate">
-        <h2>Match code</h2>
+        <h2>Room code</h2>
         <div class="bar"><div class="rcode" id="lb-room"></div><button id="lb-copy">Copy code</button></div>
       </div>
       <div class="plate"><h2>Players <em id="lb-n"></em></h2><div class="list" id="roster"></div></div>
       <div class="plate">
-        <h2>Round</h2>
-        <div class="lab" style="margin-bottom:6px">Clock</div>
+        <h2>Time on the board</h2>
         <div class="seg" id="lb-dur"></div>
-        <div class="lab" style="margin:12px 0 6px">Board code</div>
-        <div class="row"><input id="lb-board" class="up" maxlength="10" aria-label="Board code" autocomplete="off" spellcheck="false"><button id="lb-shuffle">Shuffle</button><button id="lb-today">Today's</button></div>
+        <label class="mins"><span class="lab">Custom minutes</span><input id="lb-mins" type="number" min="1" max="60"></label>
       </div>
-      <div class="row"><button class="go" id="lb-start">Start match</button><button id="lb-leave">Leave</button></div>
+      <div class="row"><button class="go" id="lb-start">Start for everyone</button><button id="lb-leave">Leave room</button></div>
       <p class="note" id="lb-wait"></p>
     </div>
+  </div>
+</div>
+
+<div id="solo" class="screen gut" hidden>
+  <div class="sub-screen">
+    <div class="bar"><h2>Solo</h2><button id="so-back">Menu</button></div>
+    <div class="plate">
+      <h2>Board</h2>
+      <div class="seg"><button id="so-random" aria-pressed="true">Random board</button><button id="so-pick" aria-pressed="false">Use a code</button></div>
+      <input id="so-code" class="up" maxlength="10" aria-label="Board code" autocomplete="off" spellcheck="false" placeholder="Board code" style="margin-top:8px" hidden>
+    </div>
+    <div class="plate">
+      <h2>Time on the board</h2>
+      <div class="seg" id="so-dur"></div>
+      <label class="mins"><span class="lab">Custom minutes</span><input id="so-mins" type="number" min="1" max="60"></label>
+    </div>
+    <p class="note" id="so-note"></p>
+    <button class="go" id="so-start">Start</button>
   </div>
 </div>
 
@@ -69,12 +83,15 @@
       <button id="rk-go">Show board</button>
       <button id="rk-today">Today's</button>
     </div>
-    <div class="row">
-      <div class="seg" style="flex:2 1 0"><button id="rk-all" aria-pressed="true">All scores</button><button id="rk-timed" aria-pressed="false">Timed only</button></div>
-      <button class="go" id="rk-play">Play this board</button>
+    <div class="bar" id="rk-days" hidden>
+      <button id="rk-prev">Previous day</button>
+      <div class="lab" id="rk-daylabel"></div>
+      <button id="rk-next">Next day</button>
     </div>
+    <div class="stats" id="rk-stats"></div>
     <div class="table" id="rk-table"></div>
     <p class="note" id="rk-note"></p>
+    <button class="go" id="rk-play">Play this board</button>
   </div>
 </div>
 
@@ -98,7 +115,7 @@
       <div class="hud">
         <div><div class="lab">Now</div><div id="score">0</div></div>
         <div><div class="lab">Best, auto-saved</div><div id="bestv">0</div></div>
-        <div id="timebox" hidden><div class="lab" style="text-align:right">Time</div><div id="timer">0:00</div></div>
+        <div id="timebox"><div class="lab" style="text-align:right">Time</div><div id="timer">0:00</div></div>
       </div>
       <div class="sub" id="tally" style="margin-top:6px"></div>
       <div class="meter" aria-hidden="true"><div id="fill"></div><i style="left:60%"></i><i style="left:80%"></i><i style="left:95%"></i></div>
@@ -120,11 +137,7 @@
         <button id="keepnew" class="go">Save and start over <span class="kbd">N</span></button>
       </div>
       <div id="chips" aria-label="Saved layouts"></div>
-      <div class="row" style="margin-top:6px">
-        <button id="fresh">New board</button>
-        <button id="bot" disabled>Bot route</button>
-        <button id="lockin" class="go" hidden>Lock in</button>
-      </div>
+      <button id="lockin" style="width:100%;margin-top:6px">End board now</button>
     </section>
     <section>
       <div class="lab" id="pl-head" style="margin-bottom:6px"></div>
@@ -148,7 +161,8 @@
       <li><b>Save a layout</b> and start over as many times as you like. Select a saved layout to bring it back.</li>
     </ul>
     <p>Click a cell on the beam to place the selected piece. Hovering first shows the new route and the change in score. Click a piece to flip it, drag it to move it, right-click to remove it.</p>
-    <p>The same board code always gives the same city, so you can compare scores on any board.</p>
+    <p>Every board runs against a clock. When it ends you can open the bot's route and other players' routes to compare.</p>
+    <p>Create a room and share its code to race friends on one random board. Solo lets you pick the clock and play a random board or any code. Today's board has its own code and leaderboard each day.</p>
     <button class="go" id="how-close" style="width:100%">Got it</button>
   </div>
 </div>
