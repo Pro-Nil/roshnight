@@ -20,11 +20,7 @@ async function initNet() {
       resolveNames(); renderShared();
     }, () => { clearTimeout(guard); dbState = "error"; renderShared(); });
   }
-  if (room) {
-    room.onPeers(() => renderOpen(), () => { room = null; renderOpen(); renderLobby(); });
-    room.presence({ tag: displayTag() }).catch(() => {});
-  }
-  renderOpen(); renderLobby(); renderShared();
+  renderLobby(); renderShared();
 }
 function resolveNames() {
   if (!user) return;
@@ -33,33 +29,33 @@ function resolveNames() {
 }
 const nameOf = id => { const d = docs.get(id), t = d && typeof d.tag === "string" ? d.tag.slice(0, 16) : ""; return t || names.get(id) || "Player"; };
 
-function entries(c, timedOnly) {
+function entries(c) {
   const out = [];
   for (const [id, d] of docs) {
     const b = d && d.boards && d.boards[c]; if (!b) continue;
     let best = null;
-    for (const kind of timedOnly ? ["t"] : ["t", "f"]) {
+    for (const kind of ["t", "f"]) {
       const e = b[kind]; if (!e) continue;
       const v = verify(c, e.r); if (!v) continue;
-      if (!best || v.score > best.score || (v.score === best.score && v.n < best.n)) best = { id, score: v.score, n: v.n, Q: v.Q, at: +e.at || 0, timed: kind === "t" };
+      if (!best || v.score > best.score || (v.score === best.score && v.n < best.n)) best = { id, score: v.score, n: v.n, Q: v.Q, at: +e.at || 0, d: +e.d || 0 };
     }
     if (best) out.push(best);
   }
   return out.sort((a, b) => b.score - a.score || a.n - b.n || a.at - b.at);
 }
-function bestOf(c, kind) { const d = uid && docs.get(uid), e = d && d.boards && d.boards[c] && d.boards[c][kind]; return e ? verify(c, e.r) : null; }
+function bestOf(c) { const d = uid && docs.get(uid), e = d && d.boards && d.boards[c] && d.boards[c].t; return e ? verify(c, e.r) : null; }
 
 let pending = null, saveT = 0, chain = Promise.resolve();
-function offerScore(kind, now) {
+function offerScore(now) {
   if (!db || !uid || readOnly || !bestRun || bestRun.score <= 0 || !bestRun.r.length) return;
-  const r = bestRun.r, cur = bestOf(code, kind);
+  const r = bestRun.r, cur = bestOf(code);
   if (cur && (bestRun.score < cur.score || (bestRun.score === cur.score && r.length >= cur.n))) return;
-  pending = { code, kind, r, at: Date.now() };
+  pending = { code, r, at: Date.now(), d: roundDur };
   clearTimeout(saveT); saveT = setTimeout(flushScore, now ? 0 : 1400);
 }
 function flushScore() {
   const p = pending; if (!p) return; pending = null;
-  writeMine({ boards: { [p.code]: { [p.kind]: { r: p.r, at: p.at } } } });
+  writeMine({ boards: { [p.code]: { t: { r: p.r, at: p.at, d: p.d } } } });
 }
 function writeMine(patch) {
   chain = chain.then(async () => {

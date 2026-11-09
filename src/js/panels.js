@@ -30,7 +30,7 @@ function refresh(announce) {
     if (!bestRun || score > bestRun.score || (score === bestRun.score && r.length < bestRun.n)) {
       bestRun = { score, n: r.length, r, P: P.slice() };
       if (score > 0 && (localBest === null || score > localBest)) { localBest = score; LS.set("roshnight-best-" + code, String(score)); }
-      offerScore(timed() ? "t" : "f", false);
+      offerScore(false);
       if (mode === "live" && M) M.room.presence({ sc: score, n: r.length }).catch(() => {});
     }
   }
@@ -40,7 +40,7 @@ function refresh(announce) {
 }
 function ticks(id, total, left) { const t = $(id); if (t.children.length !== total) { t.textContent = ""; for (let i = 0; i < total; i++) t.append(el("i")); } [...t.children].forEach((x, i) => { x.className = i < left ? "" : "off"; }); }
 function rankUI() {
-  const showBot = botScore !== null && !(timed() && !finished && !botDone);
+  const showBot = botScore !== null && (finished || botDone);
   $("par").textContent = botScore === null ? "Bot searching" : (botDone ? `Bot ${fmtS(botScore)}` : `Bot ${fmtS(botScore)}, searching`);
   const mine = bestRun ? bestRun.score : score, ratio = botScore > 0 ? mine / botScore : 0;
   $("fill").style.width = Math.max(0, Math.min(1, ratio)) * 100 + "%";
@@ -66,50 +66,47 @@ function setOverlay(id, Q) {
 function renderPlayers() {
   if (screen !== "game" || !B) return;
   const box = $("players"); box.textContent = "";
-  const rows = [], canPeek = !timed() || finished;
-  if (mode === "live") {
-    matchRows().forEach(r => rows.push({ id: r.id, name: r.name, sc: r.sc, me: r.me, sub: r.done ? `${r.n} pieces, locked` : `${r.n} pieces`, Q: r.Q }));
-    if (finished && botDone && botP) rows.push({ id: "bot", name: "Bot", sc: botScore, sub: "route search", Q: botP, bot: true });
-    rows.sort((a, b) => b.sc - a.sc);
-  } else {
-    for (const e of entries(code, mode === "trial").slice(0, 7)) rows.push({ id: e.id, name: nameOf(e.id), sc: e.score, me: e.id === uid, sub: `${e.n} pieces`, Q: e.Q });
-  }
+  const rows = [];
+  if (mode === "live") matchRows().forEach(r => rows.push({ id: r.id, name: r.name, sc: r.sc, me: r.me, sub: r.done ? `${r.n} pieces, finished` : `${r.n} pieces`, Q: r.Q }));
+  else for (const e of entries(code).slice(0, 7)) rows.push({ id: e.id, name: nameOf(e.id), sc: e.score, me: e.id === uid, sub: `${e.n} pieces`, Q: e.Q });
+  if (finished && botDone && botP) rows.push({ id: "bot", name: "Bot", sc: botScore, sub: "route open", Q: botP });
+  rows.sort((a, b) => b.sc - a.sc);
   rows.forEach((r, i) => {
-    const b = el(r.Q && canPeek ? "button" : "div", "pl" + (r.me ? " me" : "") + (overlayId === r.id ? " on" : ""));
+    const peek = r.Q && finished, b = el(peek ? "button" : "div", "pl" + (r.me ? " me" : "") + (overlayId === r.id ? " on" : ""));
     const nm = el("span", "", r.name + (r.me ? " (you)" : "")); nm.append(el("small", "", r.sub));
     b.append(el("span", "", i + 1), nm, el("span", "sc", fmtS(r.sc)));
-    if (r.Q && canPeek) { b.title = "Show this route on the map"; b.onclick = () => setOverlay(r.id, r.Q); }
+    if (peek) { b.title = "Show this route on the map"; b.onclick = () => setOverlay(r.id, r.Q); }
     box.append(b);
   });
   const empty = $("pl-empty");
   empty.hidden = rows.length > 0;
   empty.textContent = db ? "No scores on this board yet." : "Leaders appear for people with access to this page.";
-  $("bot").disabled = !(botDone && botP);
 }
 function renderVerdict() {
-  if (!finished || !timed() || screen !== "game") return;
+  if (!finished || screen !== "game") return;
   const btns = $("vbtns"); btns.textContent = "";
   const add = (t, f, go) => { const b = el("button", go ? "go" : "", t); b.onclick = f; btns.append(b); };
-  if (mode === "trial") {
-    const pos = entries(code, true).findIndex(e => e.id === uid);
-    $("vtitle").textContent = "Time";
-    $("vline").textContent = `You scored ${fmtS(score)}${pos >= 0 ? `, ${ord(pos + 1)} on this board` : ""}${botDone ? `. The bot found ${fmtS(botScore)}` : ""}.`;
-    add("New board", () => startTrial(randomCode()), true);
-    add("Retry", () => startTrial(code));
+  const botLine = botDone ? ` The bot found ${fmtS(botScore)}. Select it to see its route.` : " The bot's route opens here when its search finishes.";
+  if (mode === "solo") {
+    const pos = entries(code).findIndex(e => e.id === uid);
+    $("vtitle").textContent = "Board over";
+    $("vline").textContent = `Your best was ${fmtS(score)}${pos >= 0 ? `, ${ord(pos + 1)} on this board` : ""}.${botLine}`;
+    add("Play again", () => startSolo(code, roundDur), true);
+    add("New game", () => { exitGame(); openSolo(); });
     add("Menu", exitGame);
   } else {
     const rows = matchRows(), meRow = rows.find(r => r.me), pos = meRow ? rows.indexOf(meRow) + 1 : 0, wait = rows.filter(r => !r.done).length;
     const won = pos === 1 && rows.length > 1;
     if (won && !M.cheered && wait === 0) { M.cheered = true; sfx.win(); }
-    $("vtitle").textContent = wait ? "Locked in" : (rows.length < 2 ? "Time" : won ? "You win" : ord(pos) + " place");
-    $("vline").textContent = wait ? `Waiting for ${wait} player${wait === 1 ? "" : "s"}. You have ${fmtS(score)}.` : (rows.length < 2 ? `You scored ${fmtS(score)}.` : `${fmtS(score)} points against ${rows.length - 1} other player${rows.length === 2 ? "" : "s"}. Select a row to see that route.`);
-    add("Back to lobby", exitGame, true);
-    add("Leave match", () => { leaveRoom(); show("home"); });
+    $("vtitle").textContent = wait ? "Finished" : (rows.length < 2 ? "Board over" : won ? "You win" : ord(pos) + " place");
+    $("vline").textContent = wait ? `Waiting for ${wait} player${wait === 1 ? "" : "s"}. Your best is ${fmtS(score)}.` : `Your best was ${fmtS(score)}.${botLine}`;
+    add("Back to room", exitGame, true);
+    add("Leave room", () => { leaveRoom(); show("home"); });
   }
 }
 function makeGhost() {
   ghost = null;
-  if (locked || !B) { if (finished) $("read").textContent = "The clock has stopped. Select a player to compare routes."; else if (blackout) $("read").textContent = "Get ready."; return; }
+  if (locked || !B) { if (finished) $("read").textContent = "The board has ended. Select a player or the bot to see that route."; else if (blackout) $("read").textContent = "Get ready."; return; }
   if (hover < 0) { hint(); return; }
   if (dragFrom >= 0 && moved) {
     if (free(hover) && !P[hover]) {
