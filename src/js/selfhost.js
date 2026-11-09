@@ -81,7 +81,8 @@
   };
 
   function makeRoom(name, first, peer) {
-    const fns = new Set(), errors = new Set(), others = new Map(), ctrl = new AbortController();
+    const fns = new Set(), errors = new Set(), others = new Map();
+    let conn = new AbortController(), heard = Date.now(), eventAt = Date.now();
     const self = { peer, by: uid, isMe: true, sameTab: true, kind: "viewer", guest: false, presence: {}, updatedAt: Date.now() };
     let sending = false, waiting = false, left = false;
     const list = () => [self, ...others.values()];
@@ -92,7 +93,10 @@
       while (waiting && !left) {
         waiting = false;
         try { await post("/api/room/presence", { room: name, session, presence: self.presence }); }
-        catch (e) { if (e.code === "rate_limited") { waiting = true; await new Promise(r => setTimeout(r, 1000)); } }
+        catch (e) {
+          if (e.code === "rate_limited") { waiting = true; await new Promise(r => setTimeout(r, 1000)); }
+          else if (e.code === "not_found") await rejoin();
+        }
       }
       sending = false;
     }
@@ -110,12 +114,21 @@
       for (const k of others.keys()) if (!seen.has(k)) others.delete(k);
       fire();
     }
+    async function rejoin() {
+      try { await post("/api/room/join", { room: name, session }); waiting = true; flush(); }
+      catch (e) {
+        if (e.code !== "not_found" || left) return;
+        left = true; conn.abort(); clearInterval(timer);
+        errors.forEach(f => f(e));
+      }
+    }
     async function listen() {
       let wait = 500;
       while (!left) {
         try {
-          const res = await fetch(`/api/room/stream?room=${name}&session=${session}`, { headers: { Authorization: "Bearer " + token }, signal: ctrl.signal });
-          if (res.status === 404) { await post("/api/room/join", { room: name, session }); waiting = true; flush(); continue; }
+          conn = new AbortController(); heard = Date.now();
+          const res = await fetch(`/api/room/stream?room=${name}&session=${session}`, { headers: { Authorization: "Bearer " + token }, signal: conn.signal });
+          if (res.status === 404) { await rejoin(); if (left) return; await new Promise(r => setTimeout(r, wait)); continue; }
           if (!res.ok) throw failure(res.status);
           wait = 500;
           const reader = res.body.pipeThrough(new TextDecoderStream()).getReader();
@@ -123,22 +136,34 @@
           for (;;) {
             const { value, done } = await reader.read();
             if (done) break;
-            buf += value;
+            buf += value; heard = Date.now();
             let at;
             while ((at = buf.indexOf("\n\n")) >= 0) {
               const line = buf.slice(0, at); buf = buf.slice(at + 2);
-              if (line.startsWith("data: ")) update(JSON.parse(line.slice(6)).peers);
+              if (line.startsWith("data: ")) { eventAt = Date.now(); update(JSON.parse(line.slice(6)).peers); }
             }
           }
         } catch (e) {
           if (left) return;
-          if (e && e.code === "not_found") { left = true; errors.forEach(f => f(e)); return; }
         }
         if (left) return;
         await new Promise(r => setTimeout(r, wait));
         wait = Math.min(wait * 2, 8000);
       }
     }
+    // A live connection can stall silently on some networks, so check in whenever it goes quiet.
+    const timer = setInterval(async () => {
+      if (left) return;
+      const now = Date.now();
+      if (now - heard > 40000) { heard = now; conn.abort(); }
+      if (now - eventAt < (self.presence.st === "play" ? 15000 : 4000)) return;
+      eventAt = now;
+      try {
+        const res = await fetch(`/api/room/peers?room=${name}&session=${session}`, { headers: { Authorization: "Bearer " + token } });
+        if (res.status === 404) await rejoin();
+        else if (res.ok && !left) update((await res.json()).peers);
+      } catch (e) {}
+    }, 1000);
     const r = {
       name, peers: list, connected: () => true,
       async presence(patch) {
@@ -147,7 +172,7 @@
         self.presence = q; self.updatedAt = Date.now(); waiting = true; flush(); fire();
       },
       onPeers(f, onError) { fns.add(f); if (onError) errors.add(onError); setTimeout(() => f({ peers: list(), joined: [], left: [], updated: [] }), 0); return () => fns.delete(f); },
-      async leave() { left = true; ctrl.abort(); post("/api/room/leave", { room: name, session }).catch(() => {}); }
+      async leave() { left = true; clearInterval(timer); conn.abort(); post("/api/room/leave", { room: name, session }).catch(() => {}); }
     };
     update(first);
     listen();
