@@ -9,7 +9,7 @@ import pathlib
 
 ROOT = pathlib.Path(__file__).parent
 SRC = ROOT / "src"
-SCRIPTS = ['core', 'bot', 'board', 'util', 'sound', 'routes', 'services', 'screens', 'ranks', 'state', 'draw', 'panels', 'input', 'botclient', 'modes', 'match', 'controls', 'backdrop', 'boot']
+SCRIPTS = ['selfhost', 'core', 'bot', 'board', 'util', 'sound', 'routes', 'services', 'screens', 'ranks', 'state', 'draw', 'panels', 'input', 'botclient', 'modes', 'match', 'controls', 'backdrop', 'boot']
 HEAD = (
     '<!doctype html>\n<html lang="en">\n<head>\n<meta charset="utf-8">\n'
     '<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">\n'

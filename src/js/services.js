@@ -20,6 +20,7 @@ async function initNet() {
       resolveNames(); renderShared();
     }, () => { clearTimeout(guard); dbState = "error"; renderShared(); });
   }
+  if (db && uid && myTag) writeMine({ tag: myTag.slice(0, 16) });
   renderLobby(); renderShared();
 }
 function resolveNames() {
@@ -30,6 +31,7 @@ function resolveNames() {
 const nameOf = id => { const d = docs.get(id), t = d && typeof d.tag === "string" ? d.tag.slice(0, 16) : ""; return t || names.get(id) || "Player"; };
 
 function entries(c) {
+  if (window.roshnightNeed) window.roshnightNeed(c);
   const out = [];
   for (const [id, d] of docs) {
     const b = d && d.boards && d.boards[c]; if (!b) continue;
@@ -63,7 +65,7 @@ function writeMine(patch) {
     try { await ref.update(patch); }
     catch (e) {
       try { await ref.set(Object.assign({ tag: myTag.slice(0, 16), boards: {} }, patch)); }
-      catch (x) { if (!readOnly) { readOnly = true; toast("Your scores can't be saved here. You need edit access to this page."); renderShared(); } }
+      catch (x) { if (!readOnly) { readOnly = true; toast("Your scores can't be saved right now."); renderShared(); } }
     }
   });
 }

@@ -80,7 +80,7 @@ function renderPlayers() {
   });
   const empty = $("pl-empty");
   empty.hidden = rows.length > 0;
-  empty.textContent = db ? "No scores on this board yet." : "Leaders appear for people with access to this page.";
+  empty.textContent = db ? "No scores on this board yet." : "Leaders need the game server.";
 }
 function renderVerdict() {
   if (!finished || screen !== "game") return;

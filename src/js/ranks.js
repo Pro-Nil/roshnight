@@ -27,7 +27,7 @@ function renderRanks() {
     t.append(r);
   });
   const note = $("rk-note");
-  if (!db) note.textContent = "Leaderboards appear for signed-in people with access to this page.";
+  if (!db) note.textContent = "Leaderboards need the game server.";
   else if (dbState === "loading") note.textContent = "Loading scores.";
   else if (dbState === "slow" || dbState === "error") note.textContent = "Scores can't be reached right now.";
   else if (!rows.length) note.textContent = daily && rkDay === 0 ? "Nobody has played today's board yet. Take first place." : `No scores on ${rkCode} yet.`;

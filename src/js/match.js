@@ -2,7 +2,7 @@
 let M = null, entering = false;
 const pause = ms => new Promise(r => setTimeout(r, ms));
 const ROOM_RE = /^[a-z0-9]{3,10}$/;
-function randomRoom() { const a = "abcdefghjkmnpqrstuvwxyz23456789"; let s = ""; for (let i = 0; i < 5; i++) s += a[Math.floor(Math.random() * a.length)]; return s; }
+function randomRoom() { const a = "abcdefghjkmnpqrstuvwxyz23456789"; let s = ""; for (let i = 0; i < 6; i++) s += a[Math.floor(Math.random() * a.length)]; return s; }
 let roomError = "";
 function setBusy(on, create) {
   entering = on;
@@ -17,8 +17,11 @@ async function enterRoom(name, create) {
   try {
     if (M) leaveRoom();
     let r;
-    try { r = await room.join("m-" + name); }
+    try { r = await room.join("m-" + name, { create }); }
     catch (e) {
+      if (e && e.code === "not_found") { toast(`No room found with code ${name.toUpperCase()}. Check it with your friend.`); return; }
+      if (e && e.code === "room_full") { roomError = "That room is full."; return; }
+      if (e && e.code === "rate_limited") { roomError = "Too many attempts. Wait a minute and try again."; return; }
       roomError = e && e.code === "not_permitted" ? "This account isn't allowed to use rooms on this page." : `The room couldn't be opened${e && e.code ? ` (${e.code})` : ""}. Try again.`;
       return;
     }
@@ -75,7 +78,7 @@ function renderLobby() {
   const inRoom = !!M && !entering;
   $("lb-out").hidden = inRoom; $("lb-in").hidden = !inRoom;
   $("lb-off").hidden = !!room && !roomError;
-  $("lb-off").textContent = roomError || "Multiplayer needs the Claude page and access to it. You can still play solo.";
+  $("lb-off").textContent = roomError || "Multiplayer needs the game server. You can still play solo.";
   if (!entering) { $("lb-create").disabled = !room; $("lb-join").disabled = !room; }
   if (!inRoom) return;
   $("lb-room").textContent = M.name.toUpperCase();
