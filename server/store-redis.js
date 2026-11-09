@@ -48,6 +48,17 @@ class RedisStore {
 
   async hot(limit) { return this.db.zrevrange('hot', 0, limit - 1); }
 
+  async beginAttempt(code, uid, record) {
+    const key = `da:${code}`;
+    if (await this.db.hsetnx(key, uid, JSON.stringify(record))) { await this.db.expire(key, 3 * 86400); return null; }
+    return JSON.parse(await this.db.hget(key, uid));
+  }
+  async getAttempt(code, uid) { const value = await this.db.hget(`da:${code}`, uid); return value ? JSON.parse(value) : null; }
+  async endAttempt(code, uid) {
+    const record = await this.getAttempt(code, uid);
+    if (record && !record.done) await this.db.hset(`da:${code}`, uid, JSON.stringify({ ...record, done: true }));
+  }
+
   async createRoom(name, member) {
     const key = `r:${name}`;
     const made = await this.db.hsetnx(key, member.peer, JSON.stringify(member));

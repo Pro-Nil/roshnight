@@ -6,8 +6,8 @@ const vm = require('node:vm');
 
 const JS = path.join(__dirname, '..', 'src', 'js');
 const source = ['core.js', 'board.js'].map(f => fs.readFileSync(path.join(JS, f), 'utf8')).join('\n');
-const engine = vm.runInNewContext(`${source}\n;({ generate, L, CM, CS, N })`, Object.create(null), { timeout: 2000 });
-const { generate, L, CM, CS, N } = engine;
+const engine = vm.runInNewContext(`${source}\n;({ generate, L, CM, CS, N, dailyCode, dayKey, DAILY_DUR })`, Object.create(null), { timeout: 2000 });
+const { generate, L, CM, CS, N, dailyCode, dayKey, DAILY_DUR } = engine;
 
 const CODE_RE = /^[A-Z0-9]{1,10}$/;
 const CACHE_LIMIT = 5000;
@@ -41,4 +41,15 @@ function verifyRoute(code, route) {
   return { score: trace(placed), n: route.length };
 }
 
-module.exports = { verifyRoute, CODE_RE, generate };
+// Which past day a code belongs to: 0 is today, null means it isn't a daily code.
+let recent = { day: '', codes: new Map() };
+function dailyAge(code) {
+  const day = dayKey(0);
+  if (recent.day !== day) {
+    recent = { day, codes: new Map() };
+    for (let age = 0; age <= 60; age++) recent.codes.set(dailyCode(age), age);
+  }
+  return recent.codes.has(code) ? recent.codes.get(code) : null;
+}
+
+module.exports = { verifyRoute, CODE_RE, generate, dailyCode, dailyAge, DAILY_DUR };

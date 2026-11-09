@@ -5,7 +5,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const zlib = require('node:zlib');
 const { monitorEventLoopDelay } = require('node:perf_hooks');
-const { verifyRoute, CODE_RE } = require('./game');
+const { verifyRoute, CODE_RE, dailyCode, dailyAge, DAILY_DUR } = require('./game');
 const { MemoryStore } = require('./store-memory');
 
 const env = process.env;
@@ -30,6 +30,8 @@ const GRACE_MS = 30000;
 const STALE_MS = 60000;
 const HEARTBEAT_MS = 15000;
 const BOARD_CACHE_MS = 5000;
+const DAILY_COUNTDOWN_MS = 3600;
+const DAILY_LATE_MS = 8000;
 
 function secret() {
   if (env.SESSION_SECRET) {
@@ -95,7 +97,7 @@ const LIMIT = {
   page: new Limiter(1200, 300), hello: new Limiter(120, 60), read: new Limiter(1800, 400),
   scoreUser: new Limiter(120, 30), scoreIp: new Limiter(6000, 1000), tag: new Limiter(30, 10),
   joinUser: new Limiter(60, 20), joinIp: new Limiter(600, 120), missIp: new Limiter(60, 30),
-  presence: new Limiter(1200, 120), stream: new Limiter(120, 40),
+  presence: new Limiter(1200, 120), stream: new Limiter(120, 40), daily: new Limiter(30, 15),
 };
 setInterval(() => Object.values(LIMIT).forEach(l => l.sweep()), 30000).unref();
 
@@ -324,7 +326,7 @@ async function board(req, res, ip, code) {
   const now = Date.now();
   let cached = boardCache.get(code);
   if (!cached || now - cached.at > BOARD_CACHE_MS) {
-    cached = { at: now, body: JSON.stringify({ entries: (await store.top(code, 200)).map(e => ({ id: e.id, tag: e.tag, r: e.r, at: e.at, d: e.d })) }) };
+    cached = { at: now, body: JSON.stringify({ entries: (await store.top(code, 200)).map(e => ({ id: e.id, tag: e.tag, s: e.s, n: e.n, r: dailyAge(code) === 0 ? undefined : e.r, at: e.at, d: e.d })) }) };
     boardCache.delete(code); boardCache.set(code, cached);
     if (boardCache.size > 5000) boardCache.delete(boardCache.keys().next().value);
   }
@@ -337,10 +339,30 @@ async function score(req, res, ip) {
   if (overloaded) deny(503, 'busy');
   const checked = verifyRoute(body.code, body.r);
   if (!checked || checked.score <= 0) deny(422, 'invalid_route');
+  if (dailyAge(body.code) !== null) {
+    const attempt = await store.getAttempt(body.code, uid);
+    if (!attempt || Date.now() > attempt.end + DAILY_LATE_MS) { json(res, 200, { accepted: false, reason: 'closed' }); return; }
+  }
   const dur = num(body.d, 0, 3600000) ?? 0, entry = { s: checked.score, n: checked.n, r: body.r, at: Date.now(), d: dur };
   const accepted = await store.submit(body.code, uid, entry);
   if (accepted) boardCache.delete(body.code);
-  json(res, 200, { accepted, entry: { r: entry.r, at: entry.at, d: entry.d } });
+  json(res, 200, { accepted, entry: { r: entry.r, at: entry.at, d: entry.d, s: entry.s, n: entry.n } });
+}
+async function dailyStart(req, res) {
+  const uid = auth(req), body = await readJson(req);
+  if (!LIMIT.daily.allow(uid)) deny(429, 'rate_limited');
+  if (body.code !== dailyCode()) deny(400, 'bad_request');
+  const now = Date.now(), fresh = { start: now + DAILY_COUNTDOWN_MS, end: now + DAILY_COUNTDOWN_MS + DAILY_DUR, done: false };
+  const old = await store.beginAttempt(body.code, uid, fresh), run = old || fresh;
+  if (run.done || now >= run.end) { json(res, 200, { status: 'done' }); return; }
+  json(res, 200, { status: old ? 'resume' : 'go', toStart: Math.max(0, run.start - now), left: run.end - now });
+}
+async function dailyFinish(req, res) {
+  const uid = auth(req), body = await readJson(req);
+  if (!LIMIT.daily.allow(uid)) deny(429, 'rate_limited');
+  if (typeof body.code !== 'string' || !CODE_RE.test(body.code)) deny(400, 'bad_request');
+  await store.endAttempt(body.code, uid);
+  json(res, 200, { ok: true });
 }
 async function tag(req, res) {
   const uid = auth(req), body = await readJson(req);
@@ -369,6 +391,7 @@ async function route(req, res) {
   const url = new URL(req.url, 'http://x'), ip = clientIp(req), p = url.pathname, m = req.method;
   if ((m === 'GET' || m === 'HEAD') && (p === '/' || p === '/index.html')) { if (!LIMIT.page.allow(ip)) deny(429, 'rate_limited'); servePage(req, res); return; }
   if (m === 'GET' && p === '/api/health') { json(res, 200, { roshnight: true }); return; }
+  if (m === 'GET' && p === '/api/time') { if (!LIMIT.read.allow(ip)) deny(429, 'rate_limited'); json(res, 200, { now: Date.now() }); return; }
   if (m === 'GET' && p === '/api/ready') { json(res, (await store.ping()) && !overloaded ? 200 : 503, { ready: true }); return; }
   if (m === 'GET' && p === '/api/hot') { if (!LIMIT.read.allow(ip)) deny(429, 'rate_limited'); await hot(res); return; }
   if (m === 'GET' && p.startsWith('/api/board/')) { await board(req, res, ip, p.slice(11)); return; }
@@ -379,6 +402,8 @@ async function route(req, res) {
     if (p === '/api/hello') return hello(req, res, ip);
     if (p === '/api/score') return score(req, res, ip);
     if (p === '/api/tag') return tag(req, res);
+    if (p === '/api/daily/start') return dailyStart(req, res);
+    if (p === '/api/daily/finish') return dailyFinish(req, res);
     if (p === '/api/room/create') return roomOpen(req, res, ip, true);
     if (p === '/api/room/join') return roomOpen(req, res, ip, false);
     if (p === '/api/room/presence') return roomPresence(req, res);

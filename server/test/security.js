@@ -6,7 +6,7 @@ const fs = require('node:fs');
 const net = require('node:net');
 const os = require('node:os');
 const path = require('node:path');
-const { verifyRoute, generate } = require('../game');
+const { verifyRoute, generate, dailyCode } = require('../game');
 
 const PORT = 18600 + (process.pid % 300);
 const BASE = `http://127.0.0.1:${PORT}`;
@@ -135,6 +135,21 @@ async function main() {
   let full = 0;
   for (let i = 0; i < 34; i++) { const guest = await newPlayer(); const r = await post('/api/room/join', { room: fullRoom, session: hex(16) }, guest.token); if (r.status === 403) full++; }
   check('room size is capped', full >= 2, full);
+
+  // One attempt at today's board
+  const today = dailyCode(), todayRoute = legalRoute(today).route, racer = await newPlayer(), sneak = await newPlayer();
+  check('score without an attempt is not counted', (await post('/api/score', { code: today, r: todayRoute }, sneak.token)).data.accepted === false);
+  check('only today can be started', (await post('/api/daily/start', { code: dailyCode(1) }, racer.token)).status === 400);
+  const first = await post('/api/daily/start', { code: today }, racer.token);
+  check('first attempt starts', first.data.status === 'go' && first.data.left > 300000, first.data);
+  const again = await post('/api/daily/start', { code: today }, racer.token);
+  check('refresh resumes the same clock', again.data.status === 'resume' && again.data.left <= first.data.left, again.data);
+  check('attempt score is counted', (await post('/api/score', { code: today, r: todayRoute }, racer.token)).data.accepted === true);
+  await post('/api/daily/finish', { code: today }, racer.token);
+  check('finished board cannot be replayed', (await post('/api/daily/start', { code: today }, racer.token)).data.status === 'done');
+  const hidden = (await (await fetch(`${BASE}/api/board/${today}`)).json()).entries[0];
+  check('routes stay hidden on today\'s board', hidden && hidden.r === undefined && hidden.s > 0, hidden);
+  check('past daily boards cannot be scored', (await post('/api/score', { code: dailyCode(1), r: legalRoute(dailyCode(1)).route }, racer.token)).data.accepted === false);
 
   // Malformed traffic
   const junk = await raw('NOT HTTP AT ALL\r\n\r\n', 500);

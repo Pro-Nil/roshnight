@@ -14,6 +14,7 @@ class MemoryStore {
     this.boards = new Map();
     this.tags = new Map();
     this.rooms = new Map();
+    this.attempts = new Map();
     this.listener = null;
     this.dirty = false;
     this.saving = false;
@@ -21,6 +22,7 @@ class MemoryStore {
       const saved = JSON.parse(fs.readFileSync(this.file, 'utf8'));
       for (const [code, entries] of Object.entries(saved.boards || {})) this.boards.set(code, new Map(Object.entries(entries)));
       for (const [uid, tag] of Object.entries(saved.tags || {})) this.tags.set(uid, tag);
+      for (const [code, players] of Object.entries(saved.attempts || {})) this.attempts.set(code, new Map(Object.entries(players)));
     } catch (error) { if (error.code !== 'ENOENT') throw error; }
     this.timer = setInterval(() => this.save().catch(e => console.error('save failed:', e.message)), 5000);
     this.timer.unref();
@@ -34,7 +36,9 @@ class MemoryStore {
     try {
       const boards = {};
       for (const [code, entries] of this.boards) boards[code] = Object.fromEntries(entries);
-      const text = JSON.stringify({ boards, tags: Object.fromEntries(this.tags) });
+      const attempts = {};
+      for (const [code, players] of this.attempts) attempts[code] = Object.fromEntries(players);
+      const text = JSON.stringify({ boards, tags: Object.fromEntries(this.tags), attempts });
       await fs.promises.mkdir(this.dataDir, { recursive: true, mode: 0o700 });
       const temp = `${this.file}.tmp`;
       await fs.promises.writeFile(temp, text, { mode: 0o600 });
@@ -75,6 +79,23 @@ class MemoryStore {
 
   async hot(limit) {
     return [...this.boards].sort((a, b) => b[1].size - a[1].size).slice(0, limit).map(([code]) => code);
+  }
+
+  // Stores the attempt and returns null, or returns the one already there.
+  async beginAttempt(code, uid, record) {
+    let players = this.attempts.get(code);
+    if (!players) {
+      players = new Map(); this.attempts.set(code, players);
+      if (this.attempts.size > 5) this.attempts.delete(this.attempts.keys().next().value);
+    }
+    if (players.has(uid)) return players.get(uid);
+    players.set(uid, record); this.dirty = true;
+    return null;
+  }
+  async getAttempt(code, uid) { const players = this.attempts.get(code); return (players && players.get(uid)) || null; }
+  async endAttempt(code, uid) {
+    const players = this.attempts.get(code), record = players && players.get(uid);
+    if (record && !record.done) { players.set(uid, { ...record, done: true }); this.dirty = true; }
   }
 
   async createRoom(name, member) {
