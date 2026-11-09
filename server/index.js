@@ -26,9 +26,9 @@ const MAX_BUFFER = 256 * 1024;
 const ROOM_MAX = 32;
 const ROOM_RE = /^m-[a-z0-9]{3,10}$/;
 const SESSION_RE = /^[a-f0-9]{32}$/;
-const GRACE_MS = 6000;
+const GRACE_MS = 30000;
 const STALE_MS = 60000;
-const HEARTBEAT_MS = 20000;
+const HEARTBEAT_MS = 15000;
 const BOARD_CACHE_MS = 5000;
 
 function secret() {
@@ -268,6 +268,14 @@ async function roomLeave(req, res) {
   await removeMember(name, peer);
   json(res, 200, { ok: true });
 }
+async function roomPeers(req, res, ip, url) {
+  const uid = auth(req), name = roomName(url.searchParams.get('room')), peer = peerId(uid, sessionId(url.searchParams.get('session')));
+  if (!LIMIT.read.allow(ip)) deny(429, 'rate_limited');
+  const members = await store.members(name), me = members.find(m => m.peer === peer);
+  if (!me) deny(404, 'not_found');
+  if (Date.now() - me.seen > 20000) await store.putMember(name, { ...me, seen: Date.now() });
+  json(res, 200, { peers: publicPeers(live(members)) });
+}
 async function roomStream(req, res, ip, url) {
   const uid = auth(req), name = roomName(url.searchParams.get('room')), peer = peerId(uid, sessionId(url.searchParams.get('session')));
   if (!LIMIT.stream.allow(ip)) deny(429, 'rate_limited');
@@ -275,7 +283,7 @@ async function roomStream(req, res, ip, url) {
   if ((streamsByIp.get(ip) || 0) >= CFG.streamsPerIp) deny(429, 'rate_limited');
   const members = await store.members(name);
   if (!members.some(m => m.peer === peer)) deny(404, 'not_found');
-  res.writeHead(200, { ...SAFE_HEADERS, 'Content-Type': 'text/event-stream; charset=utf-8', 'Cache-Control': 'no-store', 'X-Accel-Buffering': 'no' });
+  res.writeHead(200, { ...SAFE_HEADERS, 'Content-Type': 'text/event-stream; charset=utf-8', 'Cache-Control': 'no-store, no-transform', 'X-Accel-Buffering': 'no' });
   res.flushHeaders();
   streamCount++; streamsByIp.set(ip, (streamsByIp.get(ip) || 0) + 1);
   if (!local.has(name)) { local.set(name, new Map()); await store.watch(name); }
@@ -365,6 +373,7 @@ async function route(req, res) {
   if (m === 'GET' && p === '/api/hot') { if (!LIMIT.read.allow(ip)) deny(429, 'rate_limited'); await hot(res); return; }
   if (m === 'GET' && p.startsWith('/api/board/')) { await board(req, res, ip, p.slice(11)); return; }
   if (m === 'GET' && p === '/api/room/stream') { await roomStream(req, res, ip, url); return; }
+  if (m === 'GET' && p === '/api/room/peers') { await roomPeers(req, res, ip, url); return; }
   if (m === 'POST') {
     checkOrigin(req);
     if (p === '/api/hello') return hello(req, res, ip);

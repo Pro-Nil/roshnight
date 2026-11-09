@@ -110,6 +110,8 @@ async function main() {
   check('non-member cannot act in a room', (await post('/api/room/presence', { room, session: sB, presence: { tag: 'x' } }, bob.token)).status === 404);
   const streamOut = await fetch(`${BASE}/api/room/stream?room=${room}&session=${sB}`, { headers: { Authorization: `Bearer ${bob.token}` } });
   check('non-member cannot listen to a room', streamOut.status === 404);
+  const peersOut = await fetch(`${BASE}/api/room/peers?room=${room}&session=${sB}`, { headers: { Authorization: `Bearer ${bob.token}` } });
+  check('non-member cannot read a room', peersOut.status === 404);
   await post('/api/room/presence', { room, session: sA, presence: { tag: 'Host', j: 1, st: 'lobby', cfg: { dur: 120000 } } }, alice.token);
   const joined = await post('/api/room/join', { room, session: sB }, bob.token);
   check('player can join with the code', joined.status === 200);
