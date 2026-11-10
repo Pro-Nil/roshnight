@@ -8,16 +8,39 @@ const MAX_BOARDS = 20000;
 const BOARD_SIZE = 1000;
 const MAX_TAGS = 200000;
 
-class MemoryStore {
+// Live rooms, which only need to exist while people are playing.
+class MemoryRooms {
+  constructor() { this.rooms = new Map(); this.listener = null; }
+
+  async createRoom(name, member) {
+    if (this.rooms.has(name)) return false;
+    this.rooms.set(name, new Map([[member.peer, member]]));
+    return true;
+  }
+  async roomExists(name) { return this.rooms.has(name); }
+  async members(name) { return [...(this.rooms.get(name) || new Map()).values()]; }
+  async putMember(name, member) { const room = this.rooms.get(name); if (room) room.set(member.peer, member); }
+  async delMember(name, peer) {
+    const room = this.rooms.get(name); if (!room) return;
+    room.delete(peer);
+    if (!room.size) this.rooms.delete(name);
+  }
+  async roomCount() { return this.rooms.size; }
+  async publish(name) { if (this.listener) this.listener(name); }
+  onPublish(fn) { this.listener = fn; }
+  async watch() {}
+  async unwatch() {}
+}
+
+class MemoryStore extends MemoryRooms {
   constructor(dataDir) {
+    super();
     this.file = path.join(dataDir, 'scores.json');
     this.dataDir = dataDir;
     this.boards = new Map();
     this.tags = new Map();
     this.owners = new Map();
-    this.rooms = new Map();
     this.attempts = new Map();
-    this.listener = null;
     this.dirty = false;
     this.saving = false;
     try {
@@ -111,25 +134,6 @@ class MemoryStore {
     const players = this.attempts.get(code), record = players && players.get(uid);
     if (record && !record.done) { players.set(uid, { ...record, done: true }); this.dirty = true; }
   }
-
-  async createRoom(name, member) {
-    if (this.rooms.has(name)) return false;
-    this.rooms.set(name, new Map([[member.peer, member]]));
-    return true;
-  }
-  async roomExists(name) { return this.rooms.has(name); }
-  async members(name) { return [...(this.rooms.get(name) || new Map()).values()]; }
-  async putMember(name, member) { const room = this.rooms.get(name); if (room) room.set(member.peer, member); }
-  async delMember(name, peer) {
-    const room = this.rooms.get(name); if (!room) return;
-    room.delete(peer);
-    if (!room.size) this.rooms.delete(name);
-  }
-  async roomCount() { return this.rooms.size; }
-  async publish(name) { if (this.listener) this.listener(name); }
-  onPublish(fn) { this.listener = fn; }
-  async watch() {}
-  async unwatch() {}
 }
 
-module.exports = { MemoryStore };
+module.exports = { MemoryStore, MemoryRooms };

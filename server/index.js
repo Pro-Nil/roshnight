@@ -6,7 +6,7 @@ const path = require('node:path');
 const zlib = require('node:zlib');
 const { monitorEventLoopDelay } = require('node:perf_hooks');
 const { verifyRoute, CODE_RE, dailyCode, dailyAge, DAILY_DUR } = require('./game');
-const { MemoryStore } = require('./store-memory');
+const { MemoryStore, MemoryRooms } = require('./store-memory');
 const { nameKey, isReserved } = require('./names');
 
 const env = process.env;
@@ -186,9 +186,29 @@ function cleanPresence(input, isHost) {
 }
 
 // ---------- Rooms ----------
+// MYSQL_URL, or data/mysql.json, which avoids having to escape symbols in a password.
+function mysqlSettings() {
+  if (env.MYSQL_URL) return { uri: env.MYSQL_URL };
+  let text;
+  try { text = fs.readFileSync(path.join(DATA, 'mysql.json'), 'utf8'); } catch (error) { if (error.code === 'ENOENT') return null; throw error; }
+  let c;
+  try { c = JSON.parse(text); } catch { throw new Error('data/mysql.json is not valid JSON.'); }
+  if (!c.host || !c.user || !c.database) throw new Error('data/mysql.json needs host, user, password and database.');
+  return { host: c.host, port: Number(c.port) || 3306, user: c.user, password: c.password || '', database: c.database };
+}
+let storageName = 'this machine';
 async function makeStore() {
+  const sql = mysqlSettings();
+  if (sql) {
+    const { MysqlStore } = require('./store-mysql');
+    let rooms = new MemoryRooms();
+    if (env.REDIS_URL) { const { RedisStore } = require('./store-redis'); rooms = new RedisStore(env.REDIS_URL); }
+    storageName = env.REDIS_URL ? 'MySQL, with rooms in Redis' : 'MySQL';
+    return MysqlStore.open(sql, rooms, DATA);
+  }
   if (env.REDIS_URL) {
     const { RedisStore } = require('./store-redis');
+    storageName = 'Redis (shared between instances)';
     return new RedisStore(env.REDIS_URL);
   }
   return new MemoryStore(DATA);
@@ -471,7 +491,7 @@ async function main() {
     console.log(`Roshnight is running.\n  On this PC:      http://localhost:${CFG.port}`);
     const lan = Object.values(require('node:os').networkInterfaces()).flat().find(a => a && a.family === 'IPv4' && !a.internal);
     if (lan) console.log(`  On your network: http://${lan.address}:${CFG.port}`);
-    console.log(env.REDIS_URL ? '  Storage: Redis (shared between instances)' : '  Storage: this machine');
+    console.log(`  Storage: ${storageName}`);
   });
   let stopping = false;
   const stop = async () => {

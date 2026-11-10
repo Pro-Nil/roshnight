@@ -44,7 +44,7 @@ function legalRoute(code) {
 const alive = async () => (await fetch(`${BASE}/api/health`)).status === 200;
 
 async function main() {
-  const child = spawn(process.execPath, [path.join(__dirname, '..', 'index.js')], { env: { ...process.env, PORT: String(PORT), HOST: '127.0.0.1', DATA_DIR: DATA, REDIS_URL: '', SESSION_SECRET: '', ROOM_GRACE_MS: '800' }, stdio: ['ignore', 'ignore', 'pipe'] });
+  const child = spawn(process.execPath, [path.join(__dirname, '..', 'index.js')], { env: { ...process.env, PORT: String(PORT), HOST: '127.0.0.1', DATA_DIR: DATA, REDIS_URL: '', SESSION_SECRET: '', ROOM_GRACE_MS: '800', MYSQL_URL: process.env.TEST_MYSQL_URL || '' }, stdio: ['ignore', 'ignore', 'pipe'] });
   let stderr = ''; child.stderr.on('data', d => { stderr += d; });
   for (let i = 0; i < 50 && !(await alive().catch(() => false)); i++) await sleep(100);
 

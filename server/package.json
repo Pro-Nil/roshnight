@@ -8,7 +8,11 @@
   "scripts": {
     "start": "node index.js",
     "test:security": "node test/security.js",
-    "test:load": "node test/load.js"
+    "test:load": "node test/load.js",
+    "test:mysql": "node test/mysql.js"
+  },
+  "dependencies": {
+    "mysql2": "3.24.6"
   },
   "optionalDependencies": {
     "ioredis": "5.6.1"
