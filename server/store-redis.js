@@ -1,6 +1,7 @@
 'use strict';
 // Many-machine storage: every server instance shares rooms and leaderboards through Redis.
 const Redis = require('ioredis');
+const { nameKey } = require('./names');
 
 const BOARD_SIZE = 1000;
 const ROOM_TTL = 4 * 3600;
@@ -19,7 +20,16 @@ class RedisStore {
 
   async ping() { return (await this.db.ping()) === 'PONG'; }
   async close() { this.db.disconnect(); this.sub.disconnect(); }
-  async setTag(uid, tag) { await this.db.hset('tags', uid, tag); }
+  // Returns false when someone else already holds the name.
+  async setTag(uid, tag) {
+    const key = nameKey(tag);
+    if (!(await this.db.hsetnx('tagowners', key, uid)) && (await this.db.hget('tagowners', key)) !== uid) return false;
+    const old = await this.db.hget('tags', uid);
+    if (old && nameKey(old) !== key) await this.db.hdel('tagowners', nameKey(old));
+    await this.db.hset('tags', uid, tag);
+    return true;
+  }
+  async getTag(uid) { return (await this.db.hget('tags', uid)) || ''; }
 
   async submit(code, uid, entry) {
     const ranks = `b:${code}`, data = `be:${code}`;

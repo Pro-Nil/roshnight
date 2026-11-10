@@ -1,8 +1,17 @@
 /* ---------- Home and controls ---------- */
 const tagInput = $("tag"); tagInput.value = myTag;
-tagInput.addEventListener("change", () => {
+tagInput.addEventListener("change", async () => {
   const typed = tagInput.value.trim().slice(0, 16);
   if (!typed) { tagInput.value = myTag; return; }
+  if (window.roshnightName) {
+    if (typed === myTag) { tagInput.value = typed; return; }
+    let free;
+    try { free = await window.roshnightName.claim(typed); }
+    catch (e) { tagInput.value = myTag; toast("Your name couldn't be saved. Try again."); return; }
+    if (!free) { tagInput.value = myTag; toast(`${typed} is taken. Try another name.`); return; }
+    setMyTag(typed); tagInput.value = typed;
+    return;
+  }
   myTag = typed; LS.set("roshnight-tag", myTag);
   if (M) M.room.presence({ tag: displayTag() }).catch(() => {});
   if (db && uid && !readOnly) writeMine({ tag: myTag });

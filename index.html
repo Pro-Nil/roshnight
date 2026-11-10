@@ -396,7 +396,7 @@ input{font:600 18px/1 var(--label);letter-spacing:.08em;color:var(--ink);backgro
   let token = null, uid = null, myTag = "";
   try { token = localStorage.getItem("roshnight-token"); } catch (e) {}
 
-  const failure = (status, body) => ({ code: (body && body.error === "already_in_room" && body.error) || { 400: "invalid_argument", 404: "not_found", 409: "room_taken", 403: "room_full", 429: "rate_limited" }[status] || "unavailable", message: "The server refused that." });
+  const failure = (status, body) => ({ code: (body && (body.error === "already_in_room" || body.error === "name_taken") && body.error) || { 400: "invalid_argument", 404: "not_found", 409: "room_taken", 403: "room_full", 429: "rate_limited" }[status] || "unavailable", message: "The server refused that." });
   async function post(path, body) {
     const headers = { "Content-Type": "application/json" };
     if (token) headers.Authorization = "Bearer " + token;
@@ -413,6 +413,7 @@ input{font:600 18px/1 var(--label);letter-spacing:.08em;color:var(--ink);backgro
     if (!r.ok) throw failure(r.status);
     const me = await r.json();
     uid = me.id;
+    if (typeof me.tag === "string") myTag = me.tag;
     if (me.token) { token = me.token; try { localStorage.setItem("roshnight-token", token); } catch (e) {} }
   }
 
@@ -473,8 +474,20 @@ input{font:600 18px/1 var(--label);letter-spacing:.08em;color:var(--ink);backgro
     finish: async code => { if (await ready) post("/api/daily/finish", { code }).catch(() => {}); }
   };
 
+  // Names are unique, so claiming one can fail when another player holds it.
+  window.roshnightName = {
+    held: async () => ((await ready) ? myTag : ""),
+    claim: async name => {
+      if (!(await ready)) return true;
+      try { await post("/api/tag", { tag: name }); }
+      catch (e) { if (e.code === "name_taken") return false; throw e; }
+      myTag = name;
+      const d = scores.get(uid); if (d) { d.tag = name; publish(); }
+      return true;
+    }
+  };
+
   async function write(data) {
-    if (typeof data.tag === "string" && data.tag !== myTag) { myTag = data.tag; await post("/api/tag", { tag: data.tag }); const d = scores.get(uid); if (d) d.tag = data.tag; }
     for (const [code, kinds] of Object.entries(data.boards || {})) {
       if (!kinds.t) continue;
       const res = await post("/api/score", { code, r: kinds.t.r, d: kinds.t.d });
@@ -1013,10 +1026,29 @@ function randomName() {
   const pick = list => list[Math.floor(Math.random() * list.length)];
   const first = ["Amber", "Neon", "Solar", "Lunar", "Copper", "Golden", "Silver", "Crimson", "Velvet", "Cosmic", "Swift", "Sly", "Brave", "Quiet", "Wild", "Lucky"];
   const second = ["Tiger", "Peacock", "Mongoose", "Cobra", "Falcon", "Panther", "Firefly", "Koel", "Myna", "Lynx", "Otter", "Comet", "Diya", "Lantern", "Beacon", "Prism"];
-  for (;;) { const name = `${pick(first)} ${pick(second)} ${10 + Math.floor(Math.random() * 90)}`; if (name.length <= 16) return name; }
+  for (;;) { const name = `${pick(first)} ${pick(second)} ${100 + Math.floor(Math.random() * 900)}`; if (name.length <= 16) return name; }
 }
 if (!myTag) { myTag = randomName(); LS.set("roshnight-tag", myTag); }
 const displayTag = () => (myTag || myName || "Player").slice(0, 16);
+
+function setMyTag(name) {
+  myTag = name; LS.set("roshnight-tag", name);
+  if (document.activeElement !== $("tag")) $("tag").value = name;
+  if (M) M.room.presence({ tag: displayTag() }).catch(() => {});
+}
+// The server decides who holds a name. A returning player gets theirs back, and anyone else draws until one is free.
+async function settleName() {
+  if (!window.roshnightName) { if (db && uid && myTag) writeMine({ tag: myTag.slice(0, 16) }); return; }
+  try {
+    const held = await window.roshnightName.held();
+    if (held) { if (held !== myTag) setMyTag(held); return; }
+    const wanted = myTag;
+    for (let i = 0; i < 10; i++) {
+      if (await window.roshnightName.claim(myTag.slice(0, 16))) { if (myTag !== wanted) toast(`${wanted} was taken, so you are now ${myTag}.`); return; }
+      setMyTag(randomName());
+    }
+  } catch (e) {}
+}
 
 async function initNet() {
   if (!window.claude || !window.claude.use) return;
@@ -1034,7 +1066,7 @@ async function initNet() {
       resolveNames(); renderShared();
     }, () => { clearTimeout(guard); dbState = "error"; renderShared(); });
   }
-  if (db && uid && myTag) writeMine({ tag: myTag.slice(0, 16) });
+  settleName();
   renderLobby(); renderShared();
   openSharedLink();
 }
@@ -1807,9 +1839,18 @@ $("lb-back").onclick = () => { leaveRoom(); show("home"); };
 
 /* ---------- Home and controls ---------- */
 const tagInput = $("tag"); tagInput.value = myTag;
-tagInput.addEventListener("change", () => {
+tagInput.addEventListener("change", async () => {
   const typed = tagInput.value.trim().slice(0, 16);
   if (!typed) { tagInput.value = myTag; return; }
+  if (window.roshnightName) {
+    if (typed === myTag) { tagInput.value = typed; return; }
+    let free;
+    try { free = await window.roshnightName.claim(typed); }
+    catch (e) { tagInput.value = myTag; toast("Your name couldn't be saved. Try again."); return; }
+    if (!free) { tagInput.value = myTag; toast(`${typed} is taken. Try another name.`); return; }
+    setMyTag(typed); tagInput.value = typed;
+    return;
+  }
   myTag = typed; LS.set("roshnight-tag", myTag);
   if (M) M.room.presence({ tag: displayTag() }).catch(() => {});
   if (db && uid && !readOnly) writeMine({ tag: myTag });

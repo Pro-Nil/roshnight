@@ -119,12 +119,12 @@ async function main() {
   await post('/api/room/presence', { room, session: sB, presence: JSON.parse('{"tag":"Mallory","j":2,"own":true,"h":' + JSON.stringify(round) + ',"evil":1,"__proto__":{"polluted":1},"cfg":{"dur":1,"x":2}}') }, bob.token);
   await sleep(50);
   const seen = (await post('/api/room/join', { room, session: sB }, bob.token)).data.peers;
-  const mallory = seen.find(p => p.peer === joined.data.peer), host = seen.find(p => p.presence.tag === 'Host');
+  const mallory = seen.find(p => p.peer === joined.data.peer), host = seen.find(p => p.by === alice.id);
   check('player cannot make themselves host', mallory && !mallory.presence.own && host && host.presence.own === true, seen);
   check('player cannot start the round', mallory && !mallory.presence.h);
   check('unknown fields dropped', mallory && !('evil' in mallory.presence) && !('polluted' in mallory.presence) && !mallory.presence.cfg);
   const hostStart = await post('/api/room/presence', { room, session: sA, presence: { tag: 'Host', j: 1, h: round } }, alice.token);
-  const after = (await post('/api/room/join', { room, session: sB }, bob.token)).data.peers.find(p => p.presence.tag === 'Host');
+  const after = (await post('/api/room/join', { room, session: sB }, bob.token)).data.peers.find(p => p.by === alice.id);
   check('host can start the round', hostStart.status === 200 && after.presence.h && after.presence.h.rid === 'abc', after);
   const big = await post('/api/room/presence', { room, session: sA, presence: { tag: 'y'.repeat(9000) } }, alice.token);
   check('huge room update refused', big.status === 413 || big.status === 400);
@@ -153,6 +153,32 @@ async function main() {
   check('a closed or reloaded tab can come back as the same player', back.status === 200 && back.data.peers.length === 1 && back.data.peer !== seat.data.peer, back);
   check('host keeps the host role after coming back', !!backSelf && backSelf.presence.own === true, back.data);
   check('the replaced tab cannot return as a second player', (await post('/api/room/join', { room: seatRoom, session: tab1 }, seatOwner.token)).status === 409);
+
+  // Names are unique
+  const nA = await newPlayer(), nB = await newPlayer(), nC = await newPlayer();
+  const setName = (p, t) => post('/api/tag', { tag: t }, p.token);
+  check('a free name can be claimed', (await setName(nA, 'Roshan')).status === 200);
+  const dup = await setName(nB, 'Roshan');
+  check('a held name is refused', dup.status === 409 && dup.data.error === 'name_taken', dup);
+  check('capitals do not get around a held name', (await setName(nB, 'rOSHAN')).status === 409);
+  check('spaces do not get around a held name', (await setName(nB, 'Ro shan')).status === 409);
+  check('a player can restyle their own name', (await setName(nA, 'ROSHAN')).status === 200);
+  check('reserved names are refused', (await setName(nB, 'Bot')).status === 409 && (await setName(nB, 'player')).status === 409);
+  check('a blank name is refused', (await setName(nB, '   ')).status === 400);
+  const back2 = await post('/api/hello', {}, nA.token);
+  check('a returning player gets their name from the server', back2.data.tag === 'ROSHAN', back2);
+  check('a new name frees the old one', (await setName(nA, 'Rohan')).status === 200 && (await setName(nB, 'Roshan')).status === 200);
+  const quote = "' OR 1=1 -- x";
+  check('database syntax in a name is plain text', (await setName(nC, quote)).status === 200 && (await post('/api/hello', {}, nC.token)).data.tag === quote);
+  check('a name with database syntax is still unique', (await setName(nA, quote)).status === 409);
+  const racers = await Promise.all(Array.from({ length: 12 }, () => newPlayer()));
+  const race = await Promise.all(racers.map(p => setName(p, 'OnlyOne')));
+  check('only one of many players racing for a name gets it', race.filter(r => r.status === 200).length === 1 && race.filter(r => r.status === 409).length === 11, race.map(r => r.status));
+  const nameRoom = 'm-names', nameTab = hex(16);
+  await post('/api/room/create', { room: nameRoom, session: nameTab }, nA.token);
+  await post('/api/room/presence', { room: nameRoom, session: nameTab, presence: { tag: 'Roshan', j: 1 } }, nA.token);
+  const shown = await fetch(`${BASE}/api/room/peers?room=${nameRoom}&session=${nameTab}`, { headers: { Authorization: `Bearer ${nA.token}` } });
+  check('a room shows the name a player holds, not one they send', (await shown.json()).peers[0].presence.tag === 'Rohan');
 
   // Difficulty levels
   const expertCode = '0XTEST1', expertPlayer = await newPlayer(), expertRoute = legalRoute(expertCode);

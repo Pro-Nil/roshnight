@@ -6,10 +6,29 @@ function randomName() {
   const pick = list => list[Math.floor(Math.random() * list.length)];
   const first = ["Amber", "Neon", "Solar", "Lunar", "Copper", "Golden", "Silver", "Crimson", "Velvet", "Cosmic", "Swift", "Sly", "Brave", "Quiet", "Wild", "Lucky"];
   const second = ["Tiger", "Peacock", "Mongoose", "Cobra", "Falcon", "Panther", "Firefly", "Koel", "Myna", "Lynx", "Otter", "Comet", "Diya", "Lantern", "Beacon", "Prism"];
-  for (;;) { const name = `${pick(first)} ${pick(second)} ${10 + Math.floor(Math.random() * 90)}`; if (name.length <= 16) return name; }
+  for (;;) { const name = `${pick(first)} ${pick(second)} ${100 + Math.floor(Math.random() * 900)}`; if (name.length <= 16) return name; }
 }
 if (!myTag) { myTag = randomName(); LS.set("roshnight-tag", myTag); }
 const displayTag = () => (myTag || myName || "Player").slice(0, 16);
+
+function setMyTag(name) {
+  myTag = name; LS.set("roshnight-tag", name);
+  if (document.activeElement !== $("tag")) $("tag").value = name;
+  if (M) M.room.presence({ tag: displayTag() }).catch(() => {});
+}
+// The server decides who holds a name. A returning player gets theirs back, and anyone else draws until one is free.
+async function settleName() {
+  if (!window.roshnightName) { if (db && uid && myTag) writeMine({ tag: myTag.slice(0, 16) }); return; }
+  try {
+    const held = await window.roshnightName.held();
+    if (held) { if (held !== myTag) setMyTag(held); return; }
+    const wanted = myTag;
+    for (let i = 0; i < 10; i++) {
+      if (await window.roshnightName.claim(myTag.slice(0, 16))) { if (myTag !== wanted) toast(`${wanted} was taken, so you are now ${myTag}.`); return; }
+      setMyTag(randomName());
+    }
+  } catch (e) {}
+}
 
 async function initNet() {
   if (!window.claude || !window.claude.use) return;
@@ -27,7 +46,7 @@ async function initNet() {
       resolveNames(); renderShared();
     }, () => { clearTimeout(guard); dbState = "error"; renderShared(); });
   }
-  if (db && uid && myTag) writeMine({ tag: myTag.slice(0, 16) });
+  settleName();
   renderLobby(); renderShared();
   openSharedLink();
 }

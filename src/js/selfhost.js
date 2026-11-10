@@ -6,7 +6,7 @@
   let token = null, uid = null, myTag = "";
   try { token = localStorage.getItem("roshnight-token"); } catch (e) {}
 
-  const failure = (status, body) => ({ code: (body && body.error === "already_in_room" && body.error) || { 400: "invalid_argument", 404: "not_found", 409: "room_taken", 403: "room_full", 429: "rate_limited" }[status] || "unavailable", message: "The server refused that." });
+  const failure = (status, body) => ({ code: (body && (body.error === "already_in_room" || body.error === "name_taken") && body.error) || { 400: "invalid_argument", 404: "not_found", 409: "room_taken", 403: "room_full", 429: "rate_limited" }[status] || "unavailable", message: "The server refused that." });
   async function post(path, body) {
     const headers = { "Content-Type": "application/json" };
     if (token) headers.Authorization = "Bearer " + token;
@@ -23,6 +23,7 @@
     if (!r.ok) throw failure(r.status);
     const me = await r.json();
     uid = me.id;
+    if (typeof me.tag === "string") myTag = me.tag;
     if (me.token) { token = me.token; try { localStorage.setItem("roshnight-token", token); } catch (e) {} }
   }
 
@@ -83,8 +84,20 @@
     finish: async code => { if (await ready) post("/api/daily/finish", { code }).catch(() => {}); }
   };
 
+  // Names are unique, so claiming one can fail when another player holds it.
+  window.roshnightName = {
+    held: async () => ((await ready) ? myTag : ""),
+    claim: async name => {
+      if (!(await ready)) return true;
+      try { await post("/api/tag", { tag: name }); }
+      catch (e) { if (e.code === "name_taken") return false; throw e; }
+      myTag = name;
+      const d = scores.get(uid); if (d) { d.tag = name; publish(); }
+      return true;
+    }
+  };
+
   async function write(data) {
-    if (typeof data.tag === "string" && data.tag !== myTag) { myTag = data.tag; await post("/api/tag", { tag: data.tag }); const d = scores.get(uid); if (d) d.tag = data.tag; }
     for (const [code, kinds] of Object.entries(data.boards || {})) {
       if (!kinds.t) continue;
       const res = await post("/api/score", { code, r: kinds.t.r, d: kinds.t.d });

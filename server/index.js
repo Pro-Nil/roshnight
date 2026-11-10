@@ -7,6 +7,7 @@ const zlib = require('node:zlib');
 const { monitorEventLoopDelay } = require('node:perf_hooks');
 const { verifyRoute, CODE_RE, dailyCode, dailyAge, DAILY_DUR } = require('./game');
 const { MemoryStore } = require('./store-memory');
+const { nameKey, isReserved } = require('./names');
 
 const env = process.env;
 const ROOT = path.join(__dirname, '..');
@@ -237,7 +238,7 @@ async function hello(req, res, ip) {
   if (!LIMIT.hello.allow(ip)) deny(429, 'rate_limited');
   await readJson(req);
   const existing = readToken(req);
-  if (existing) { json(res, 200, { id: existing }); return; }
+  if (existing) { json(res, 200, { id: existing, tag: await store.getTag(existing) }); return; }
   const { uid, token } = issueToken();
   json(res, 200, { id: uid, token });
 }
@@ -271,7 +272,9 @@ async function roomPresence(req, res) {
   if (!LIMIT.presence.allow(peer)) deny(429, 'rate_limited');
   const members = await store.members(name), me = members.find(m => m.peer === peer);
   if (!me) deny(404, 'not_found');
-  await store.putMember(name, { ...me, seen: Date.now(), presence: cleanPresence(body.presence, !!me.own) });
+  const presence = cleanPresence(body.presence, !!me.own), held = await store.getTag(uid);
+  if (held) presence.tag = held; // A player can only appear under the name they hold.
+  await store.putMember(name, { ...me, seen: Date.now(), presence });
   await store.publish(name);
   json(res, 200, { ok: true });
 }
@@ -388,7 +391,9 @@ async function dailyFinish(req, res) {
 async function tag(req, res) {
   const uid = auth(req), body = await readJson(req);
   if (!LIMIT.tag.allow(uid)) deny(429, 'rate_limited');
-  await store.setTag(uid, cleanTag(body.tag));
+  const name = cleanTag(body.tag);
+  if (!nameKey(name)) deny(400, 'bad_request');
+  if (isReserved(name) || !(await store.setTag(uid, name))) deny(409, 'name_taken');
   json(res, 200, { ok: true });
 }
 let hotCache = { at: 0, body: '{"codes":[]}' };
