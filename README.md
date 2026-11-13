@@ -18,7 +18,7 @@ The same board code always generates the same city.
 - **Multiplayer:** anyone can create a room and share its code. The host sets the time, and starting gives everyone the same random board.
 - **Solo:** pick the time, then play a random board or any board code.
 
-Every board has a clock, and the bot's route opens only after the board ends. Each board code has its own leaderboard, and every score on it is recalculated from the route that earned it.
+Every board has a clock, and the bot's route opens only after the board ends. Each board code has its own leaderboard, and every score on it is recalculated from the route that earned it. The bot finds the same route on every device. For the daily board the server works it out once, in a background thread, and gives it to each player when their attempt ends.
 
 ## Run it
 

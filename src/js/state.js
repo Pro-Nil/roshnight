@@ -3,7 +3,7 @@ const cv = $("cv"), ctx = cv.getContext("2d"), wrap = $("wrap"), stat = document
 let B, code, trace, ghostTrace, overTrace, P = new Int8Array(N * N), hist = [], future = [];
 let tool = "m", orient = 1, hover = -1, dragFrom = -1, moved = false, pressed = false, touching = false;
 let segs = [], score = 0, lit = new Uint8Array(N * N), used = new Uint8Array(N * N), litAt = new Float64Array(N * N), floats = [];
-let ghost = null, botP = null, botScore = null, botDone = false, worker = null, overlay = null, overlayId = null;
+let ghost = null, botP = null, botScore = null, botDone = false, botLater = false, worker = null, overlay = null, overlayId = null;
 let bestRun = null, saved = [];
 let roundDur = 180000, dailyRun = false;
 let mode = "solo", locked = false, finished = false, blackout = false, startAt = 0, endAt = 0, revealAt = 0, lastSec = -1, localBest = null;

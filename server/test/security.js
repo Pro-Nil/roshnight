@@ -213,10 +213,18 @@ async function main() {
   check('only today can be started', (await post('/api/daily/start', { code: dailyCode(1) }, racer.token)).status === 400);
   const first = await post('/api/daily/start', { code: today }, racer.token);
   check('first attempt starts', first.data.status === 'go' && first.data.left > 300000, first.data);
+  check('bot route hidden during the attempt', (await post('/api/daily/bot', { code: today }, racer.token)).status === 403);
+  check('bot route hidden without an attempt', (await post('/api/daily/bot', { code: today }, sneak.token)).status === 403);
+  check('bot only for daily boards', (await post('/api/daily/bot', { code: 'ABCDE' }, racer.token)).status === 400);
   const again = await post('/api/daily/start', { code: today }, racer.token);
   check('refresh resumes the same clock', again.data.status === 'resume' && again.data.left <= first.data.left, again.data);
   check('attempt score is counted', (await post('/api/score', { code: today, r: todayRoute }, racer.token)).data.accepted === true);
   await post('/api/daily/finish', { code: today }, racer.token);
+  let served = null;
+  for (let i = 0; i < 60 && !served; i++) { const got = (await post('/api/daily/bot', { code: today }, racer.token)).data; if (got.status === 'ready') served = got; else await sleep(2000); }
+  const own = require('../bot').search(today), legalBot = served && verifyRoute(today, served.r);
+  check('bot route given after the attempt', !!served && !!legalBot && legalBot.score === served.s, served);
+  check('server bot matches the bot on a device', !!served && served.s === own.s && served.r.join() === own.r.join(), { served, own });
   check('finished board cannot be replayed', (await post('/api/daily/start', { code: today }, racer.token)).data.status === 'done');
   const hidden = (await (await fetch(`${BASE}/api/board/${today}`)).json()).entries[0];
   check('routes stay hidden on today\'s board', hidden && hidden.r === undefined && hidden.s > 0, hidden);

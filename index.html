@@ -471,7 +471,17 @@ input{font:600 18px/1 var(--label);letter-spacing:.08em;color:var(--ink);backgro
 
   window.roshnightDaily = {
     start: async code => ((await ready) ? post("/api/daily/start", { code }) : null),
-    finish: async code => { if (await ready) post("/api/daily/finish", { code }).catch(() => {}); }
+    finish: async code => { if (await ready) await post("/api/daily/finish", { code }).catch(() => {}); },
+    // Resolves to { r, s } once the server's bot is ready, or null if it can't give one.
+    bot: async code => {
+      if (!(await ready)) return null;
+      for (let i = 0; i < 20; i++) {
+        try { const res = await post("/api/daily/bot", { code }); if (res.status === "ready") return res; }
+        catch (e) { return null; }
+        await new Promise(go => setTimeout(go, 3000));
+      }
+      return null;
+    }
   };
 
   // Names are unique, so claiming one can fail when another player holds it.
@@ -1227,7 +1237,7 @@ const cv = $("cv"), ctx = cv.getContext("2d"), wrap = $("wrap"), stat = document
 let B, code, trace, ghostTrace, overTrace, P = new Int8Array(N * N), hist = [], future = [];
 let tool = "m", orient = 1, hover = -1, dragFrom = -1, moved = false, pressed = false, touching = false;
 let segs = [], score = 0, lit = new Uint8Array(N * N), used = new Uint8Array(N * N), litAt = new Float64Array(N * N), floats = [];
-let ghost = null, botP = null, botScore = null, botDone = false, worker = null, overlay = null, overlayId = null;
+let ghost = null, botP = null, botScore = null, botDone = false, botLater = false, worker = null, overlay = null, overlayId = null;
 let bestRun = null, saved = [];
 let roundDur = 180000, dailyRun = false;
 let mode = "solo", locked = false, finished = false, blackout = false, startAt = 0, endAt = 0, revealAt = 0, lastSec = -1, localBest = null;
@@ -1463,7 +1473,7 @@ function refresh(announce) {
 function ticks(id, total, left) { const t = $(id); if (t.children.length !== total) { t.textContent = ""; for (let i = 0; i < total; i++) t.append(el("i")); } [...t.children].forEach((x, i) => { x.className = i < left ? "" : "off"; }); }
 function rankUI() {
   const showBot = botScore !== null && (finished || botDone);
-  $("par").textContent = botScore === null ? "Bot searching" : (botDone ? `Bot ${fmtS(botScore)}` : `Bot ${fmtS(botScore)}, searching`);
+  $("par").textContent = botScore === null ? (botLater ? "Bot at the end" : "Bot searching") : (botDone ? `Bot ${fmtS(botScore)}` : `Bot ${fmtS(botScore)}, searching`);
   const mine = bestRun ? bestRun.score : score, ratio = botScore > 0 ? mine / botScore : 0;
   $("fill").style.width = Math.max(0, Math.min(1, ratio)) * 100 + "%";
   $("rank").textContent = !showBot ? "" : mine > botScore ? "Daybreak, you beat the bot" : ratio >= 1 ? "Daybreak" : ratio >= .95 ? "Lighthouse" : ratio >= .8 ? "Floodlight" : ratio >= .6 ? "Streetlight" : ratio >= .3 ? "Candle" : "Blackout";
@@ -1647,9 +1657,26 @@ document.addEventListener("keydown", e => {
 });
 
 /* ---------- Bot ---------- */
+// The daily board's bot comes from the server when the attempt ends. Other boards search on this device.
 function runBot() {
   if (worker) worker.terminate();
-  botP = null; botScore = null; botDone = false; rankUI();
+  worker = null; botP = null; botScore = null; botDone = false;
+  botLater = dailyRun && !!(window.roshnightDaily && window.roshnightDaily.bot);
+  rankUI();
+  if (!botLater) searchBot();
+}
+async function dailyBot() {
+  const myCode = code, got = await window.roshnightDaily.bot(myCode).catch(() => null);
+  if (code !== myCode) return;
+  botLater = false;
+  if (!got) { searchBot(); return; }
+  botP = new Int8Array(N * N);
+  for (const v of got.r) botP[v >> 3] = v & 7;
+  botScore = trace(botP); botDone = true;
+  trace(P, segs);
+  rankUI(); renderPlayers(); renderVerdict();
+}
+function searchBot() {
   const myCode = code;
   try { worker = new Worker(URL.createObjectURL(new Blob([`(${WORKER})((${CORE})())`], { type: "text/javascript" }))); }
   catch (e) { worker = null; $("par").textContent = "Bot unavailable"; return; }
@@ -1702,7 +1729,7 @@ async function startDaily() {
 }
 function finishDaily() {
   LS.set("roshnight-daily-" + code, "done");
-  if (window.roshnightDaily) window.roshnightDaily.finish(code);
+  if (window.roshnightDaily) { const f = window.roshnightDaily.finish(code); if (botLater) f.then(() => dailyBot()); }
 }
 function openSolo(c) { if (c) { soloRandom = false; $("so-code").value = c; } show("solo"); }
 function renderSolo() {

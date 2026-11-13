@@ -37,7 +37,7 @@ async function startDaily() {
 }
 function finishDaily() {
   LS.set("roshnight-daily-" + code, "done");
-  if (window.roshnightDaily) window.roshnightDaily.finish(code);
+  if (window.roshnightDaily) { const f = window.roshnightDaily.finish(code); if (botLater) f.then(() => dailyBot()); }
 }
 function openSolo(c) { if (c) { soloRandom = false; $("so-code").value = c; } show("solo"); }
 function renderSolo() {

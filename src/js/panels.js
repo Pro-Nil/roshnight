@@ -43,7 +43,7 @@ function refresh(announce) {
 function ticks(id, total, left) { const t = $(id); if (t.children.length !== total) { t.textContent = ""; for (let i = 0; i < total; i++) t.append(el("i")); } [...t.children].forEach((x, i) => { x.className = i < left ? "" : "off"; }); }
 function rankUI() {
   const showBot = botScore !== null && (finished || botDone);
-  $("par").textContent = botScore === null ? "Bot searching" : (botDone ? `Bot ${fmtS(botScore)}` : `Bot ${fmtS(botScore)}, searching`);
+  $("par").textContent = botScore === null ? (botLater ? "Bot at the end" : "Bot searching") : (botDone ? `Bot ${fmtS(botScore)}` : `Bot ${fmtS(botScore)}, searching`);
   const mine = bestRun ? bestRun.score : score, ratio = botScore > 0 ? mine / botScore : 0;
   $("fill").style.width = Math.max(0, Math.min(1, ratio)) * 100 + "%";
   $("rank").textContent = !showBot ? "" : mine > botScore ? "Daybreak, you beat the bot" : ratio >= 1 ? "Daybreak" : ratio >= .95 ? "Lighthouse" : ratio >= .8 ? "Floodlight" : ratio >= .6 ? "Streetlight" : ratio >= .3 ? "Candle" : "Blackout";

@@ -1,7 +1,24 @@
 /* ---------- Bot ---------- */
+// The daily board's bot comes from the server when the attempt ends. Other boards search on this device.
 function runBot() {
   if (worker) worker.terminate();
-  botP = null; botScore = null; botDone = false; rankUI();
+  worker = null; botP = null; botScore = null; botDone = false;
+  botLater = dailyRun && !!(window.roshnightDaily && window.roshnightDaily.bot);
+  rankUI();
+  if (!botLater) searchBot();
+}
+async function dailyBot() {
+  const myCode = code, got = await window.roshnightDaily.bot(myCode).catch(() => null);
+  if (code !== myCode) return;
+  botLater = false;
+  if (!got) { searchBot(); return; }
+  botP = new Int8Array(N * N);
+  for (const v of got.r) botP[v >> 3] = v & 7;
+  botScore = trace(botP); botDone = true;
+  trace(P, segs);
+  rankUI(); renderPlayers(); renderVerdict();
+}
+function searchBot() {
   const myCode = code;
   try { worker = new Worker(URL.createObjectURL(new Blob([`(${WORKER})((${CORE})())`], { type: "text/javascript" }))); }
   catch (e) { worker = null; $("par").textContent = "Bot unavailable"; return; }

@@ -7,6 +7,7 @@ const zlib = require('node:zlib');
 const { monitorEventLoopDelay } = require('node:perf_hooks');
 const { verifyRoute, CODE_RE, dailyCode, dailyAge, DAILY_DUR } = require('./game');
 const { MemoryStore, MemoryRooms } = require('./store-memory');
+const { botFor } = require('./bot');
 const { nameKey, isReserved } = require('./names');
 
 const env = process.env;
@@ -408,6 +409,17 @@ async function dailyFinish(req, res) {
   await store.endAttempt(body.code, uid);
   json(res, 200, { ok: true });
 }
+// The bot's route gives today's board away, so it only goes to players whose attempt is over.
+async function dailyBot(req, res) {
+  const uid = auth(req), body = await readJson(req);
+  if (!LIMIT.daily.allow(uid)) deny(429, 'rate_limited');
+  const age = typeof body.code === 'string' ? dailyAge(body.code) : null;
+  if (age === null || age > 1) deny(400, 'bad_request');
+  const attempt = await store.getAttempt(body.code, uid);
+  if (!attempt || (!attempt.done && Date.now() < attempt.end)) deny(403, 'not_finished');
+  const bot = botFor(body.code);
+  json(res, 200, bot ? { status: 'ready', r: bot.r, s: bot.s } : { status: 'pending' });
+}
 async function tag(req, res) {
   const uid = auth(req), body = await readJson(req);
   if (!LIMIT.tag.allow(uid)) deny(429, 'rate_limited');
@@ -450,6 +462,7 @@ async function route(req, res) {
     if (p === '/api/tag') return tag(req, res);
     if (p === '/api/daily/start') return dailyStart(req, res);
     if (p === '/api/daily/finish') return dailyFinish(req, res);
+    if (p === '/api/daily/bot') return dailyBot(req, res);
     if (p === '/api/room/create') return roomOpen(req, res, ip, true);
     if (p === '/api/room/join') return roomOpen(req, res, ip, false);
     if (p === '/api/room/presence') return roomPresence(req, res);
@@ -460,6 +473,9 @@ async function route(req, res) {
 
 async function main() {
   store = await makeStore();
+  // Today's bot is ready before the first player finishes, and a new day's is started soon after midnight.
+  botFor(dailyCode());
+  setInterval(() => botFor(dailyCode()), 60000).unref();
   store.onPublish(schedulePush);
   const server = http.createServer({ connectionsCheckingInterval: 1000 }, (req, res) => {
     route(req, res).catch(error => {

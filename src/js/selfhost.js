@@ -81,7 +81,17 @@
 
   window.roshnightDaily = {
     start: async code => ((await ready) ? post("/api/daily/start", { code }) : null),
-    finish: async code => { if (await ready) post("/api/daily/finish", { code }).catch(() => {}); }
+    finish: async code => { if (await ready) await post("/api/daily/finish", { code }).catch(() => {}); },
+    // Resolves to { r, s } once the server's bot is ready, or null if it can't give one.
+    bot: async code => {
+      if (!(await ready)) return null;
+      for (let i = 0; i < 20; i++) {
+        try { const res = await post("/api/daily/bot", { code }); if (res.status === "ready") return res; }
+        catch (e) { return null; }
+        await new Promise(go => setTimeout(go, 3000));
+      }
+      return null;
+    }
   };
 
   // Names are unique, so claiming one can fail when another player holds it.
