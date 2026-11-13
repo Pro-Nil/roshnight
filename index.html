@@ -664,9 +664,25 @@ const CORE = function () {
 
 const WORKER = function (L) {
   const { N, DR, DC, SL, tracer } = L, MIRRORS = 12, SPLITS = 2;
-  const ri = n => Math.floor(Math.random() * n);
+  // Every device must reach the same route, so the search is seeded by the board, measured in work done
+  // instead of time, and uses only arithmetic that rounds identically in every browser.
+  const LN2 = 0.6931471805599453, COOL = -2.8903717578961645; // COOL = ln(0.05 / 0.9)
+  const HALF = [1]; for (let i = 1; i < 1100; i++) HALF.push(HALF[i - 1] / 2);
+  const ex = x => {
+    if (x >= 0) return 1;
+    const k = Math.round(-x / LN2);
+    if (k >= HALF.length) return 0;
+    const r = x + k * LN2;
+    let term = 1, sum = 1;
+    for (let n = 1; n < 14; n++) { term = term * r / n; sum += term; }
+    return sum * HALF[k];
+  };
+  let rnd, ri;
   self.onmessage = e => {
     const B = e.data, trace = tracer(B), P = new Int8Array(N * N);
+    let seed = B.seed | 0, work = 0;
+    rnd = () => { seed = seed + 0x6D2B79F5 | 0; let t = Math.imul(seed ^ seed >>> 15, 1 | seed); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; };
+    ri = n => Math.floor(rnd() * n);
     const free = new Uint8Array(N * N);
     for (let i = 0; i < N * N; i++) free[i] = (!B.wall[i] && !B.val[i] && i !== B.src) ? 1 : 0;
     const plus = [];
@@ -683,21 +699,21 @@ const WORKER = function (L) {
     const offer = (A, f) => {
       if (f > bestF + 1e-9) { bestF = f; best = A.slice(); post(false); }
     };
-    const fit = (A, segs) => { const s = trace(A, segs); return s - 0.01 * trace.hits; };
+    const fit = (A, segs) => { work++; const s = trace(A, segs); return s - 0.01 * trace.hits; };
 
     function beam(width, deadline, keep) {
       let front = [[]];
       for (let depth = 0; depth < MIRRORS + SPLITS; depth++) {
         const pool = new Map(), segs = [], tmp = [];
         for (const st of front) {
-          if (performance.now() > deadline) return;
+          if (work > deadline) return;
           P.fill(0);
           let m = 0, s = 0;
           for (const v of st) { P[v >> 3] = v & 7; if ((v & 7) < 3) m++; else s++; }
           const kinds = [];
           if (m < MIRRORS) kinds.push(1, 2);
           if (s < SPLITS) kinds.push(3, 4);
-          trace(P, segs);
+          work++; trace(P, segs);
           const tails = segs.filter(x => x[4] !== 0);
           for (const t of tails) for (let k = 1; k <= t[3]; k++) {
             const idx = (t[0] + DR[t[2]] * k) * N + t[1] + DC[t[2]] * k;
@@ -728,7 +744,7 @@ const WORKER = function (L) {
     }
 
     function anneal(start, deadline) {
-      const hot = mean * 0.9, cold = mean * 0.05, t0 = performance.now(), span = Math.max(1, deadline - t0);
+      const hot = mean * 0.9, t0 = work, span = Math.max(1, deadline - t0);
       let segs = [], cur = start.slice(), curF = fit(cur, segs), T = hot, k = 0, list = [], missing = [];
       const settle = () => {
         list = [];
@@ -738,7 +754,7 @@ const WORKER = function (L) {
       settle();
       const turn = (d, nd) => (SL[d] === nd ? 1 : 2);
       const propose = () => {
-        const nw = cur.slice(), added = [], roll = Math.random();
+        const nw = cur.slice(), added = [], roll = rnd();
         if (roll < 0.55 && missing.length) {
           let t = missing[ri(missing.length)];
           const t2 = missing[ri(missing.length)];
@@ -752,7 +768,7 @@ const WORKER = function (L) {
               const r = g[0] + DR[d] * kk, c = g[1] + DC[d] * kk, idx = r * N + c;
               if (!free[idx] || (hz ? r === tr : c === tc)) continue;
               const nd = hz ? (tr > r ? 1 : 3) : (tc > c ? 0 : 2);
-              nw[idx] = turn(d, nd) + (Math.random() < 0.3 ? 2 : 0);
+              nw[idx] = turn(d, nd) + (rnd() < 0.3 ? 2 : 0);
               added.push(idx); break;
             }
             if (!g[3]) continue;
@@ -762,7 +778,7 @@ const WORKER = function (L) {
             if (!free[corner]) continue;
             const nd = hz ? (tr > r ? 1 : 3) : (tc > c ? 0 : 2);
             const last = hz ? (tc > c ? 0 : 2) : (tr > r ? 1 : 3);
-            nw[idx] = turn(d, nd) + (Math.random() < 0.3 ? 2 : 0);
+            nw[idx] = turn(d, nd) + (rnd() < 0.3 ? 2 : 0);
             nw[corner] = turn(nd, last);
             added.push(idx, corner); break;
           }
@@ -786,7 +802,7 @@ const WORKER = function (L) {
           if (!g[3]) return null;
           const kk = 1 + ri(g[3]), idx = (g[0] + DR[g[2]] * kk) * N + g[1] + DC[g[2]] * kk;
           if (!free[idx]) return null;
-          nw[idx] = 1 + ri(2) + (Math.random() < 0.3 ? 2 : 0); added.push(idx);
+          nw[idx] = 1 + ri(2) + (rnd() < 0.3 ? 2 : 0); added.push(idx);
         }
         for (const [lo, hi, cap] of [[1, 2, MIRRORS], [3, 4, SPLITS]]) {
           const have = [];
@@ -803,15 +819,15 @@ const WORKER = function (L) {
       };
       let tmp = [];
       for (;;) {
+        work++;
         if (!(++k & 127)) {
-          const now = performance.now();
-          if (now >= deadline) return;
-          T = hot * Math.pow(cold / hot, (now - t0) / span);
+          if (work >= deadline) return;
+          T = hot * ex((work - t0) / span * COOL);
         }
         const nw = propose();
         if (!nw) continue;
         const f = fit(nw, tmp);
-        if (f >= curF || Math.random() < Math.exp((f - curF) / T)) {
+        if (f >= curF || rnd() < ex((f - curF) / T)) {
           cur = nw; curF = f;
           const sw = segs; segs = tmp; tmp = sw;
           settle();
@@ -820,16 +836,16 @@ const WORKER = function (L) {
       }
     }
 
-    const t0 = performance.now(), total = B.ms, keep = [];
+    const total = B.work, keep = [];
     let width = 30;
-    while (performance.now() - t0 < total * 0.35) { beam(width, t0 + total * 0.35, keep); width *= 2; }
+    while (work < total * 0.35) { beam(width, total * 0.35, keep); width *= 2; }
     keep.sort((a, b) => b.f - a.f);
     const seeds = keep.slice(0, 10), rounds = 8;
     for (let i = 0; i < rounds; i++) {
-      const now = performance.now(), left = t0 + total - now;
+      const left = total - work;
       if (left <= 0) break;
       const start = (i % 2 || !seeds.length) ? best : seeds[(i / 2 | 0) % seeds.length].A;
-      anneal(start, now + left / (rounds - i));
+      anneal(start, work + left / (rounds - i));
     }
     self.postMessage({ pieces: Array.from(best), done: true });
   };
@@ -897,7 +913,7 @@ function generate(code) {
   }
   for (let k = lv.circles[0] + ri(lv.circles[1]); k > 0; k--) put(ri(N), ri(N), circle());
   for (let k = lv.diamonds[0] + ri(lv.diamonds[1]); k > 0; k--) put(ri(N), ri(N), diamond());
-  return { wall, val, src, dir, windows, ms: 9000 };
+  return { wall, val, src, dir, windows, work: 2400000 };
 }
 
 const DAILY_DUR = 300000;
@@ -1644,7 +1660,7 @@ function runBot() {
     trace(P, segs);
     rankUI(); renderPlayers(); renderVerdict();
   };
-  worker.postMessage({ wall: B.wall, val: B.val, src: B.src, dir: B.dir, ms: B.ms });
+  worker.postMessage({ wall: B.wall, val: B.val, src: B.src, dir: B.dir, work: B.work, seed: hashCode("bot:" + code) });
 }
 
 /* ---------- Modes ---------- */

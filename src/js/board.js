@@ -60,7 +60,7 @@ function generate(code) {
   }
   for (let k = lv.circles[0] + ri(lv.circles[1]); k > 0; k--) put(ri(N), ri(N), circle());
   for (let k = lv.diamonds[0] + ri(lv.diamonds[1]); k > 0; k--) put(ri(N), ri(N), diamond());
-  return { wall, val, src, dir, windows, ms: 9000 };
+  return { wall, val, src, dir, windows, work: 2400000 };
 }
 
 const DAILY_DUR = 300000;

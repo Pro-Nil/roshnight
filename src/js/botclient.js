@@ -12,6 +12,6 @@ function runBot() {
     trace(P, segs);
     rankUI(); renderPlayers(); renderVerdict();
   };
-  worker.postMessage({ wall: B.wall, val: B.val, src: B.src, dir: B.dir, ms: B.ms });
+  worker.postMessage({ wall: B.wall, val: B.val, src: B.src, dir: B.dir, work: B.work, seed: hashCode("bot:" + code) });
 }
 
